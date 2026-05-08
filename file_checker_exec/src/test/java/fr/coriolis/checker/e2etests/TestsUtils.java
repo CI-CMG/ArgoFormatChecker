@@ -27,7 +27,8 @@ public final class TestsUtils {
 		try {
 			properties.load(clazz.getClassLoader().getResourceAsStream("fr/coriolis/checker/core/Application.properties"));
 			version = properties.getProperty("Version", "");
-			jarPath = String.format("target/file_checker_exec-%s.jar", version);
+			jarPath = String.format("target/argo-file-checker-exec-%s-exe.jar", version);
+//      jarPath = String.format("target/file_checker_exec-%s.jar", version);
 			jarFile = new File(jarPath);
 			Files.createDirectories(Paths.get(OUTPUT_DIR_PATH));
 			outputDir = new File(OUTPUT_DIR_PATH);

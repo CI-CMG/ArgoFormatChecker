@@ -4,12 +4,16 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>fr.ifremer</groupId>
-    <artifactId>file_checker_parent</artifactId>
-    <version>3.0.3</version>
+<!--    <groupId>fr.ifremer</groupId>-->
+<!--    <artifactId>file_checker_parent</artifactId>-->
+<!--    <version>3.0.3</version>-->
+    <groupId>io.github.ci-cmg</groupId>
+    <artifactId>argo-file-checker-parent</artifactId>
+    <version>4.0.0-SNAPSHOT</version>
   </parent>
 
-  <artifactId>file_checker_spec</artifactId>
+<!--  <artifactId>file_checker_spec</artifactId>-->
+  <artifactId>argo-file-checker-spec</artifactId>
 
 
   <name>Argo NetCDF file format checker specs</name>

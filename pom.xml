@@ -3,12 +3,46 @@
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>fr.ifremer</groupId>
-  <artifactId>file_checker_parent</artifactId>
-  <version>3.0.3</version>
+<!--  <groupId>fr.ifremer</groupId>-->
+<!--  <artifactId>file_checker_parent</artifactId>-->
+<!--  <version>3.0.3</version>-->
+
+  <groupId>io.github.ci-cmg</groupId>
+  <artifactId>argo-file-checker-parent</artifactId>
+  <version>4.0.0-SNAPSHOT</version>
   <packaging>pom</packaging>
 
-  <name>Argo NetCDF file format checker parent</name>
+
+  <name>${project.groupId}:${project.artifactId}</name>
+  <description>Argo NetCDF file format checker parent. Fork of https://github.com/OneArgo/ArgoFormatChecker</description>
+  <url>https://github.com/CI-CMG/ArgoFormatChecker</url>
+
+  <licenses>
+    <license>
+      <name>CC0 1.0 Universal</name>
+      <url>https://creativecommons.org/publicdomain/zero/1.0/deed.en</url>
+    </license>
+  </licenses>
+
+  <developers>
+    <developer>
+      <name>OneArgo</name>
+      <organization>OneArgo</organization>
+      <organizationUrl>https://github.com/OneArgo</organizationUrl>
+    </developer>
+    <developer>
+      <name>CIRES Coastal and Marine Geophysics / Marine Geology and Geophysics Developers</name>
+      <organization>CIRES</organization>
+      <organizationUrl>https://github.com/CI-CMG</organizationUrl>
+    </developer>
+  </developers>
+
+  <scm>
+    <connection>scm:git:https://github.com/CI-CMG/ArgoFormatChecker.git</connection>
+    <developerConnection>scm:git:https://github.com/CI-CMG/ArgoFormatChecker.git</developerConnection>
+    <url>https://github.com/CI-CMG/ArgoFormatChecker</url>
+    <tag>HEAD</tag>
+  </scm>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -29,8 +63,31 @@
           <artifactId>maven-compiler-plugin</artifactId>
           <version>3.13.0</version>
         </plugin>
+
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-deploy-plugin</artifactId>
+          <version>3.1.4</version>
+          <configuration>
+            <deployAtEnd>true</deployAtEnd>
+          </configuration>
+        </plugin>
       </plugins>
     </pluginManagement>
+    <plugins>
+      <plugin>
+        <groupId>org.sonatype.central</groupId>
+        <artifactId>central-publishing-maven-plugin</artifactId>
+        <version>0.7.0</version>
+        <extensions>true</extensions>
+        <configuration>
+          <publishingServerId>central</publishingServerId>
+          <autoPublish>true</autoPublish>
+          <waitUntil>published</waitUntil>
+        </configuration>
+      </plugin>
+    </plugins>
   </build>
+
 
 </project>

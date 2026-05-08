@@ -4,14 +4,18 @@
 	<modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>fr.ifremer</groupId>
-    <artifactId>file_checker_parent</artifactId>
-    <version>3.0.3</version>
+<!--    <groupId>fr.ifremer</groupId>-->
+<!--    <artifactId>file_checker_parent</artifactId>-->
+<!--    <version>3.0.3</version>-->
+    <groupId>io.github.ci-cmg</groupId>
+    <artifactId>argo-file-checker-parent</artifactId>
+    <version>4.0.0-SNAPSHOT</version>
   </parent>
 
-	<artifactId>file_checker_exec</artifactId>
+<!--	<artifactId>file_checker_exec</artifactId>-->
+  <artifactId>argo-file-checker-exec</artifactId>
 
-	<name>Argo NetCDF file format checker</name>
+<!--	<name>Argo NetCDF file format checker</name>-->
 
 	<properties>
 		<dep.junit.version>5.11.4</dep.junit.version>
@@ -22,10 +26,15 @@
 	<dependencies>
 <!--    This jar contains the spec files under the "file_checker_spec" classpath directory.  No need to explicitly copy them during build.-->
     <dependency>
-      <groupId>fr.ifremer</groupId>
-      <artifactId>file_checker_spec</artifactId>
+      <groupId>io.github.ci-cmg</groupId>
+      <artifactId>argo-file-checker-spec</artifactId>
       <version>${project.version}</version>
     </dependency>
+<!--    <dependency>-->
+<!--      <groupId>fr.ifremer</groupId>-->
+<!--      <artifactId>file_checker_spec</artifactId>-->
+<!--      <version>${project.version}</version>-->
+<!--    </dependency>-->
     <dependency>
       <groupId>io.github.ci-cmg.argo</groupId>
       <artifactId>argo-file-check-xml</artifactId>
@@ -120,17 +129,17 @@
 	</dependencies>
 
 	<!--Distribution-->
-	<distributionManagement>
-		<repository>
-			<id>ifr-gitlab-project</id>
-			<url>https://gitlab.ifremer.fr/api/v4/projects/4888/packages/maven</url>
-		</repository>
+<!--	<distributionManagement>-->
+<!--		<repository>-->
+<!--			<id>ifr-gitlab-project</id>-->
+<!--			<url>https://gitlab.ifremer.fr/api/v4/projects/4888/packages/maven</url>-->
+<!--		</repository>-->
 
-		<snapshotRepository>
-			<id>ifr-gitlab-project</id>
-			<url>https://gitlab.ifremer.fr/api/v4/projects/4888/packages/maven</url>
-		</snapshotRepository>
-	</distributionManagement>
+<!--		<snapshotRepository>-->
+<!--			<id>ifr-gitlab-project</id>-->
+<!--			<url>https://gitlab.ifremer.fr/api/v4/projects/4888/packages/maven</url>-->
+<!--		</snapshotRepository>-->
+<!--	</distributionManagement>-->
 	<repositories>
 		<repository>
 			<id>nexus-ifremer-release</id>
@@ -184,22 +193,6 @@
 			</testResource>
 		</testResources>
 		<plugins>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-jar-plugin</artifactId>
-        <version>3.5.0</version>
-        <executions>
-          <execution>
-            <id>library</id>
-            <goals>
-              <goal>jar</goal>
-            </goals>
-            <configuration>
-              <classifier>lib</classifier>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
 		<!-- delete resources/file_checker_spec folder before copying it from source folder -->
 			<plugin>
 			    <groupId>org.apache.maven.plugins</groupId>
@@ -345,6 +338,8 @@
 								</filter>
 							</filters>
 							<createDependencyReducedPom>false</createDependencyReducedPom>
+              <shadedArtifactAttached>false</shadedArtifactAttached>
+              <finalName>${project.build.finalName}-exe</finalName>
 						</configuration>
 					</execution>
 				</executions>
