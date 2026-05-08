@@ -25,7 +25,7 @@ public final class TestsUtils {
 	public static void init(Class<?> clazz) {
 		Properties properties = new Properties();
 		try {
-			properties.load(clazz.getClassLoader().getResourceAsStream("Application.properties"));
+			properties.load(clazz.getClassLoader().getResourceAsStream("fr/coriolis/checker/core/Application.properties"));
 			version = properties.getProperty("Version", "");
 			jarPath = String.format("target/file_checker_exec-%s.jar", version);
 			jarFile = new File(jarPath);

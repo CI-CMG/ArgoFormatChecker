@@ -7,8 +7,8 @@ import java.util.*;
 import ucar.nc2.Variable;
 import ucar.ma2.DataType;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * @version  $HeadURL: https://inversion.nrlmry.navy.mil/svn/godae/trunk/argo/bin/java/usgdac/ArgoVariable.java $
@@ -26,7 +26,7 @@ public class ArgoVariable {
    //private static Pattern pParam   = Pattern.compile
    //   ("(\\w+?)(_QC|_ADJUSTED|_ADJUSTED_QC|_ADJUSTED_ERROR)?");
 
-   private static final Logger log = LogManager.getLogger("ArgoVariable");
+   private static final Logger log = LoggerFactory.getLogger("ArgoVariable");
 
    //..object variables..
    private LinkedHashMap<String, ArgoAttribute> attr;

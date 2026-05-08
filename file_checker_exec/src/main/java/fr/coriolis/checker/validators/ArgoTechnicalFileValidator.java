@@ -1,17 +1,17 @@
 package fr.coriolis.checker.validators;
 
+import fr.coriolis.checker.tables.ArgoNVSReferenceTable;
 import java.io.IOException;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
 import fr.coriolis.checker.core.ArgoDataFile;
 import fr.coriolis.checker.specs.ArgoConfigTechParam;
 import fr.coriolis.checker.specs.ArgoReferenceTable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Implements all of the features required to validate ArgoTechnicalFiles
@@ -22,7 +22,7 @@ import fr.coriolis.checker.specs.ArgoReferenceTable;
  * @version $Id: ArgoTechnicalFile.java 1263 2021-06-14 17:59:56Z ignaszewski $
  */
 
-public class ArgoTechnicalFileValidator extends ArgoFileValidator {
+public class ArgoTechnicalFileValidator extends BaseArgoFileValidator {
 
 	// .........................................
 	// VARIABLES
@@ -30,14 +30,14 @@ public class ArgoTechnicalFileValidator extends ArgoFileValidator {
 
 	// ..class variables
 	// ..standard i/o shortcuts
-	private static final Logger log = LogManager.getLogger("ArgoTechnicalFileValidator");
+	private static final Logger log = LoggerFactory.getLogger("ArgoTechnicalFileValidator");
 
 	// .......................................
 	// CONSTRUCTORS
 	// .......................................
 
-	public ArgoTechnicalFileValidator(ArgoDataFile arFile) throws IOException {
-		super(arFile);
+	public ArgoTechnicalFileValidator(ArgoDataFile arFile, ArgoNVSReferenceTable argoNVSReferenceTable) {
+		super(arFile, argoNVSReferenceTable);
 	}
 
 //	public ArgoTechnicalFileValidator(String specDir, String version) {
@@ -71,7 +71,7 @@ public class ArgoTechnicalFileValidator extends ArgoFileValidator {
 //		return (ArgoTechnicalFileValidator) arFile;
 //	}
 
-	/**
+  /**
 	 * Validates the data in the technical file. This is a driver routine that
 	 * performs all types of validations (see other validate* routines).
 	 * 
@@ -86,8 +86,9 @@ public class ArgoTechnicalFileValidator extends ArgoFileValidator {
 	 *         reason).
 	 * @throws IOException If an I/O error occurs
 	 */
+  @Override
 	public boolean validateData(String dacName, boolean ckNulls) throws IOException {
-		boolean basicsChecks = super.basicDataValidation(ckNulls);
+		boolean basicsChecks = basicDataValidation(ckNulls);
 		if (!basicsChecks) {
 			return false;
 		}
@@ -116,13 +117,13 @@ public class ArgoTechnicalFileValidator extends ArgoFileValidator {
 	 * Upon completion <i>obj</i>.nFormatErrors(), <i>obj</i>.nFormatWarnings,
 	 * <i>obj</i>.formatErrors(), and <i>obj</i>.formatWarnings will return results.
 	 *
-	 * @throws IOException If an I/O error occurs
+	 *
 	 */
-	public void validateDates() throws IOException {
+	private void validateDates() {
 		log.debug(".....validateDates.....");
 		Date fileTime = new Date(arFile.getFile().lastModified());
 		// ...........creation and update dates checks:.............
-		super.validateCreationUpdateDates(fileTime);
+		validateCreationUpdateDates(fileTime);
 	}// ..end validateDates
 
 	/**
@@ -137,19 +138,19 @@ public class ArgoTechnicalFileValidator extends ArgoFileValidator {
 	 *
 	 * @param dac the ArgoReferenceTable.DACS dac indicator. If <i>null</i> the
 	 *            DATA_CENTRE will not be checked
-	 * @throws IOException If an I/O error occurs
+	 *
 	 */
-	public void validateMetaData(ArgoReferenceTable.DACS dac) throws IOException {
+	private void validateMetaData(ArgoReferenceTable.DACS dac) {
 		log.debug(".....validateMetaData.....");
 
 		// PLATFORM_NUMBER
 		String str = arFile.readString("PLATFORM_NUMBER").trim();
-		if (!super.validatePlatfomNumber(str)) {
+		if (!validatePlatfomNumber(str)) {
 			validationResult.addError("PLATFORM_NUMBER" + ": '" + str + "': Invalid");
 		}
 
 		// DATA_CENTRE
-		super.validateDataCentre(dac);
+		validateDataCentre(dac);
 	}// ..end validateMetaData
 
 	/**
@@ -159,10 +160,10 @@ public class ArgoTechnicalFileValidator extends ArgoFileValidator {
 	 * Upon completion <i>obj</i>.nFormatErrors(), <i>obj</i>.nFormatWarnings,
 	 * <i>obj</i>.formatErrors(), and <i>obj</i>.formatWarnings will return results.
 	 *
-	 * @param ckValue true = validate the values also
-	 * @throws IOException If an I/O error occurs
+	 *
+	 *
 	 */
-	public void validateTechParams() throws IOException {
+	private void validateTechParams() {
 		log.debug(".....validateTechParams.....");
 
 		int nParam = arFile.getDimensionLength("N_TECH_PARAM");
@@ -217,7 +218,7 @@ public class ArgoTechnicalFileValidator extends ArgoFileValidator {
 			if (!nameAlreadyChecked.contains(param)) {
 				// ..this parameter name has not been checked
 
-				ArgoConfigTechParam.ArgoConfigTechParamMatch match = arFile.getFileSpec().ConfigTech
+				ArgoConfigTechParam.ArgoConfigTechParamMatch match = arFile.getFileSpec().getConfigTech()
 						.findTechParam(param);
 				// =======
 				// CK_0195
@@ -237,7 +238,7 @@ public class ArgoTechnicalFileValidator extends ArgoFileValidator {
 					// =======
 					// CK_0196
 					// =======
-					if (match.isDeprecated) {
+					if (match.isDeprecated()) {
 						// ..IS a deprecated name --> warning
 						validationResult.addWarning(nName + "[" + (n + 1) + "]: " + "Deprecated name '" + param);
 						log.debug("parameter is deprecated: '{}'", param);
@@ -245,11 +246,11 @@ public class ArgoTechnicalFileValidator extends ArgoFileValidator {
 					// =======
 					// CK_0197
 					// =======
-					if (match.nFailedMatchedTemplates > 0) {
+					if (match.getnFailedMatchedTemplates() > 0) {
 						// ..these Templates failed to match the values specified in the table
 						// ..they are errors
 
-						for (Map.Entry<String, String> entry : match.failedMatchedTemplates.entrySet()) {
+						for (Map.Entry<String, String> entry : match.getFailedMatchedTemplates().entrySet()) {
 							String tmplt = entry.getKey();
 							String val = entry.getValue();
 
@@ -265,7 +266,7 @@ public class ArgoTechnicalFileValidator extends ArgoFileValidator {
 						}
 					}
 
-					if (match.nUnMatchedTemplates > 0) {
+					if (match.getnUnMatchedTemplates() > 0) {
 						// ==========================================================================
 						// 2026 / NVS / 3.0.0 : not usefull anymore as all must be provided in the
 						// table / definition field / Template values
@@ -319,12 +320,12 @@ public class ArgoTechnicalFileValidator extends ArgoFileValidator {
 				// =======
 				// CK_0198
 				// =======
-				if (!arFile.getFileSpec().ConfigTech.isConfigTechUnit(unit)) {
+				if (!arFile.getFileSpec().getConfigTech().isConfigTechUnit(unit)) {
 					// ..NOT an active unit
 					// =======
 					// CK_0199
 					// =======
-					if (arFile.getFileSpec().ConfigTech.isDeprecatedConfigTechUnit(unit)) {
+					if (arFile.getFileSpec().getConfigTech().isDeprecatedConfigTechUnit(unit)) {
 						// ..IS a deprecated unit --> warning
 
 						validUnit = true;
@@ -376,5 +377,15 @@ public class ArgoTechnicalFileValidator extends ArgoFileValidator {
 		} // ..end for nParam
 
 	} // ..end validateTechParams
+
+  @Override
+  public boolean validateData(boolean singleCycle, String dacName, boolean ckNulls) throws IOException {
+    return validateData(dacName, ckNulls);
+  }
+
+  @Override
+  public boolean validateData(boolean ckNulls) throws IOException {
+    return validateData(null, ckNulls);
+  }
 
 } // ..end class

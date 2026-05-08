@@ -23,7 +23,7 @@ public class ArgoAttribute {
  * <li>IGNORE_VALUE - Attribute must exist; value is NOT specified
  * <li>NOT_ALLOWED - Attribute must NOT exist
  */
-   public static enum AttrHandling {
+   public enum AttrHandling {
       FULLY_SPECIFIED      ("Fully specified"),
       IGNORE_COMPLETELY    ("Ignore completely"),
       IGNORE_VALUE         ("Must exist; Ignore value"),

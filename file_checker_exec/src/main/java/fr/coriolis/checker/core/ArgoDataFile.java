@@ -1,15 +1,17 @@
 package fr.coriolis.checker.core;
 
+import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.nio.file.Path;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import fr.coriolis.checker.specs.ArgoFileSpecification;
 import fr.coriolis.checker.specs.ArgoReferenceTable;
@@ -111,7 +113,7 @@ import ucar.nc2.Variable;
  * @version $Id: ArgoDataFile.java 1295 2022-03-19 22:15:07Z ignaszewski $
  */
 
-public class ArgoDataFile {
+public class ArgoDataFile implements Closeable {
 //................................................
 //             VARIABLE DECLARATIONS
 //................................................
@@ -149,7 +151,7 @@ public class ArgoDataFile {
 	// ..standard i/o shortcuts
 	private static PrintStream stdout = new PrintStream(System.out);
 	private static PrintStream stderr = new PrintStream(System.err);
-	private static final Logger log = LogManager.getLogger("ArgoDataFile");
+	private static final Logger log = LoggerFactory.getLogger("ArgoDataFile");
 
 	// ........object variables........
 
@@ -158,7 +160,7 @@ public class ArgoDataFile {
 	private FileType fileType = FileType.UNKNOWN;
 	private String format_version = null;
 	private NetcdfFile ncReader = null;
-	private String ncFileName = new String("");
+	private Path ncFileName = null;
 	private ArgoFileSpecification spec = null;
 	private ArgoReferenceTable.DACS validatedDAC;
 
@@ -331,14 +333,8 @@ public class ArgoDataFile {
 	 *         file.
 	 * @throws IOException If an I/O error occurs
 	 */
-	public static ArgoDataFile open(String inFile, String... dacName) throws IOException {
-		try {
-			return (ArgoDataFile.open(inFile, false, dacName));
-
-		} catch (IOException e) {
-			throw e;
-		}
-
+	public static ArgoDataFile open(ArgoNVSReferenceTable argoNVSReferenceTable, Path inFile, String... dacName) throws IOException {
+    return ArgoDataFile.open(inFile, argoNVSReferenceTable, false, dacName);
 	}
 
 	/**
@@ -353,12 +349,12 @@ public class ArgoDataFile {
 	 *         file.
 	 * @throws IOException If an I/O error occurs
 	 */
-	public static ArgoDataFile open(String inFile, boolean overrideBadTYPE, String... dacName) throws IOException {
+	public static ArgoDataFile open(Path inFile, ArgoNVSReferenceTable argoNVSReferenceTable, boolean overrideBadTYPE, String... dacName) throws IOException {
 		// ..open the netCDF file
 		NetcdfFile nc;
 
 		log.info("file = '" + inFile + "'");
-		File file = new File(inFile);
+		File file = inFile.toFile();
 		if (!file.canRead()) {
 			log.error("'" + inFile + "' cannot be read");
 			throw new IOException("File '" + inFile + "' cannot be read");
@@ -369,7 +365,7 @@ public class ArgoDataFile {
 		}
 
 		try {
-			nc = NetcdfFile.open(inFile);
+			nc = NetcdfFile.open(inFile.toString());
 
 		} catch (Exception e) {
 			log.error("NetcdfFile.open error on '" + inFile + "'");
@@ -394,7 +390,7 @@ public class ArgoDataFile {
 		if (dacName.length > 0) {
 			dac = dacName[0];
 		}
-		SkosConcept dataTypeTableEntry = ArgoNVSReferenceTable.DATA_TYPE_TABLE.getConceptMembersByPrefLabelMap()
+		SkosConcept dataTypeTableEntry = argoNVSReferenceTable.getDATA_TYPE_TABLE().getConceptMembersByPrefLabelMap()
 				.get(dt);
 		// =======
 		// CK_0293
@@ -433,9 +429,7 @@ public class ArgoDataFile {
 				ft = FileType.UNKNOWN;
 				stderr.println(
 						"\n\n******\n" + "****** PROGRAM ERROR: Unexpected file type.  TERMINATING.\n" + "******");
-				System.exit(1);
-				// ValidationResult.lastMessage = new String("Invalid DATA_TYPE: '" + dt + "'");
-				return null;
+        throw new IllegalStateException("Unexpected file type: '" + dt + "'");
 			}
 		} else if (dt.equals("ARGO profile")) {
 			// ################# TEMPORARY WARNING ################
@@ -568,16 +562,16 @@ public class ArgoDataFile {
 	 *         file.
 	 * @throws IOException If an I/O error occurs
 	 */
-	public static ArgoDataFile open(String inFile, String specDir, boolean fullSpec, String... dacName)
+	public static ArgoDataFile open(ArgoNVSReferenceTable argoNVSReferenceTable, Path inFile, boolean useInternalSpecs, Path specDir, boolean fullSpec, String... dacName)
 			throws IOException {
-		ArgoDataFile arFile = open(inFile, dacName);
+		ArgoDataFile arFile = open(argoNVSReferenceTable, inFile, dacName);
 		if (arFile == null) {
 			return arFile;
 		}
 
 		// ..create the specification
 		try {
-			arFile.spec = openSpecification(fullSpec, arFile.fileType, arFile.format_version);
+			arFile.spec = openSpecification(argoNVSReferenceTable, fullSpec, arFile.fileType, arFile.format_version, useInternalSpecs, specDir);
 		} catch (IOException e) {
 			if (e.getMessage().matches("cdlFileName.*does not exist")) {
 				ValidationResult.lastMessage = "File type / version not valid in the FileChecker: " + arFile.fileType
@@ -597,6 +591,7 @@ public class ArgoDataFile {
 	 *
 	 * @throws IOException If an I/O error occurs
 	 */
+  @Override
 	public void close() throws IOException {
 		if (ncReader != null) {
 			ncReader.close();
@@ -617,15 +612,20 @@ public class ArgoDataFile {
 	 * @see fr.coriolis.checker.specs.ArgoFileSpecification ArgoFileSpecification
 	 *
 	 * @param fullSpec true = open full specification; false = open file template
-	 * @param specDir  The string name of the directory containing the specification
-	 *                 files
 	 * @param ft       The FileType (enum) of the file type
 	 * @param version  The version of the file specification to open
 	 * @return the boolean status indicator. True if the specification was opened.
 	 *         False if the specification could not be opened
 	 * @throws IOException If an I/O error occurs
 	 */
-	public static ArgoFileSpecification openSpecification(boolean fullSpec, FileType ft, String version)
+	public static ArgoFileSpecification openSpecification(
+      ArgoNVSReferenceTable argoNVSReferenceTable,
+      boolean fullSpec,
+      FileType ft,
+      String version,
+      boolean useInternalSpecs,
+      Path specDir
+  )
 			throws IOException {
 		log.debug("fullSpec = {}", fullSpec);
 		log.debug("file type = {}", ft.specType);
@@ -659,7 +659,7 @@ public class ArgoDataFile {
 		// ..build a specification for this file
 		ArgoFileSpecification s = null;
 		try {
-			s = new ArgoFileSpecification(fullSpec, ft, version);
+			s = new ArgoFileSpecification(argoNVSReferenceTable, fullSpec, ft, version, useInternalSpecs, specDir);
 
 		} catch (IOException e) {
 			ValidationResult.lastMessage = "Failed in ArgoFileSpecification";
@@ -2282,10 +2282,7 @@ public class ArgoDataFile {
 	 * </ul>
 	 * <p>
 	 * NOTES: Only performed for a core-file for the first profile.
-	 * 
-	 * @param nProf  number of profiles in the file
-	 * @param nParam number of parameters in the file
-	 * @param nLevel number of levels in the file
+	 *
 	 * @throws IOException If an I/O error occurs
 	 */
 	public double[] computePsalAdjStats() {

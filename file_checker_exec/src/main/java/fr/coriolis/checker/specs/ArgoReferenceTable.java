@@ -6,16 +6,18 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.Collection;
-import java.util.EnumMap;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.Vector;
 import java.util.regex.Pattern;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * LEGACY ref tables. Mainly replaced by NVS tables in 2026, v3.0.0
@@ -41,7 +43,7 @@ public final class ArgoReferenceTable {
 
 	// ..........class variables..........
 
-	public static enum DACS {
+	public enum DACS {
 		AOML("aoml"), BODC("bodc"), CORIOLIS("coriolis"), CSIO("csio"), CSIRO("csiro"), INCOIS("incois"), JMA("jma"),
 		KMA("kma"), KORDI("kordi"), MEDS("meds"), NMDIS("nmdis"), KIOST("kiost");
 
@@ -52,76 +54,71 @@ public final class ArgoReferenceTable {
 		}
 	};
 
-	private static boolean initialized = false;
-
 	// ..match a blank line (or a line with just comments)
-	static Pattern pBlankOrComment;
+  private static final Pattern pBlankOrComment = Pattern.compile("^\\s*(?://.*)*");
 
 	// ..match a "deprecated" / "deleted" line;
-	static Pattern pActive;
-	static Pattern pDeprecated;
-	static Pattern pDeleted;
-	static Pattern pRefused;
-	static Pattern pUnderway;
+
+  private static final Pattern pActive = Pattern.compile("(?i)(active|approved).*");
+  private static final Pattern pDeprecated = Pattern.compile("(?i)deprecated.*");
+  private static final Pattern pDeleted = Pattern.compile("(?i)(deleted|obsolete).*");
+  private static final Pattern pRefused = Pattern.compile("(?i)refused.*");
+  private static final Pattern pUnderway = Pattern.compile("(?i)(publication|creation) +underway.*");
 
 	// ..match a string ending in a digit
-	static Pattern pEndsInDigit;
+  private static final Pattern pEndsInDigit = Pattern.compile("\\d$");
 
 	// ....reference table 4 --- but not quite. Also includes DAC to center-code
 	// mapping......
-	public static final EnumMap<DACS, String> DacCenterCodes = new EnumMap<DACS, String>(DACS.class);
+	public static final Map<DACS, String> DacCenterCodes = createDacCenterCodes();
 
 	// .....Measurement_codes..........
 	// public static IntegerTable MEASUREMENT_CODE_specific;
 	public static IntegerTable MEASUREMENT_CODE_toJuldVariable;
 
 	// ..logger
-	private static final Logger log = LogManager.getLogger("ArgoReferenceTable");
+	private static final Logger log = LoggerFactory.getLogger("ArgoReferenceTable");
 
 	// .................class initializer...............
 
-	static {
-		DacCenterCodes.put(DACS.AOML, "AO MB NA PM SI UW WH");
-		DacCenterCodes.put(DACS.BODC, "BO");
-		DacCenterCodes.put(DACS.CORIOLIS, "AW GE IO IF LV RU SP VL DK EA");
-		DacCenterCodes.put(DACS.CSIO, "HZ");
-		DacCenterCodes.put(DACS.CSIRO, "CS");
-		DacCenterCodes.put(DACS.INCOIS, "IN");
-		DacCenterCodes.put(DACS.JMA, "JA JM");
-		DacCenterCodes.put(DACS.KMA, "KM");
-		DacCenterCodes.put(DACS.KORDI, "KO");
-		DacCenterCodes.put(DACS.KIOST, "KO");
-		DacCenterCodes.put(DACS.MEDS, "CI ME");
-		DacCenterCodes.put(DACS.NMDIS, "NM");
+  private static Map<DACS, String> createDacCenterCodes() {
+    Map<DACS, String> map = new HashMap<>();
+    map.put(DACS.AOML, "AO MB NA PM SI UW WH");
+    map.put(DACS.BODC, "BO");
+    map.put(DACS.CORIOLIS, "AW GE IO IF LV RU SP VL DK EA");
+    map.put(DACS.CSIO, "HZ");
+    map.put(DACS.CSIRO, "CS");
+    map.put(DACS.INCOIS, "IN");
+    map.put(DACS.JMA, "JA JM");
+    map.put(DACS.KMA, "KM");
+    map.put(DACS.KORDI, "KO");
+    map.put(DACS.KIOST, "KO");
+    map.put(DACS.MEDS, "CI ME");
+    map.put(DACS.NMDIS, "NM");
+    return Collections.unmodifiableMap(map);
+  }
 
-		pBlankOrComment = Pattern.compile("^\\s*(?://.*)*");
-		pActive = Pattern.compile("(?i)(active|approved).*");
-		pDeprecated = Pattern.compile("(?i)deprecated.*");
-		pDeleted = Pattern.compile("(?i)(deleted|obsolete).*");
-		pRefused = Pattern.compile("(?i)refused.*");
-		pUnderway = Pattern.compile("(?i)(publication|creation) +underway.*");
-		pEndsInDigit = Pattern.compile("\\d$");
-	}
+  private final boolean useInternalSpecs;
+  private final Path specDir;
 
 	// .................................................................
 	// CONSTRUCTORS
 	// .................................................................
 
-	public ArgoReferenceTable() throws IOException {
+	public ArgoReferenceTable(boolean useInternalSpecs, Path specDir) throws IOException {
+    this.useInternalSpecs = useInternalSpecs;
+    this.specDir = specDir;
 //		String prefix = "ref_table-";
 
-		if (initialized) {
-			log.debug(".....ArgoReferenceTable: already initialized.....");
-			return; // ..already initialized
-		}
-
 		log.debug(".....ArgoReferenceTable constructor: start.....");
-
-		initialized = true;
 
 		MEASUREMENT_CODE_toJuldVariable = new IntegerTable("measurement_code-juld_variables");
 
 	}
+
+  private InputStream openSpec(String fileName) throws IOException {
+    return SpecIO.open(useInternalSpecs, specDir, fileName);
+  }
 
 	// ..................................................................
 	// METHODS
@@ -132,7 +129,7 @@ public final class ArgoReferenceTable {
 		log.debug("...start readMapCharString...");
 		log.debug("parsing file '{}'", fileName);
 
-		try (InputStream in = SpecIO.getInstance().open(fileName);
+		try (InputStream in = openSpec(fileName);
 				BufferedReader fileReader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));) {
 
 			// ..read through the file
@@ -179,7 +176,7 @@ public final class ArgoReferenceTable {
 		log.debug("...start readMapStringString...");
 		log.debug("parsing file '{}'", fileName);
 
-		try (InputStream in = SpecIO.getInstance().open(fileName);
+		try (InputStream in = openSpec(fileName);
 				BufferedReader fileReader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));) {
 
 			// ..read through the file
@@ -267,7 +264,7 @@ public final class ArgoReferenceTable {
 		log.debug("...start readMapIntegerString...");
 		log.debug("parsing file '{}'", fileName);
 
-		try (InputStream in = SpecIO.getInstance().open(fileName);
+		try (InputStream in = openSpec(fileName);
 				BufferedReader fileReader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));) {
 
 			// ..read through the file

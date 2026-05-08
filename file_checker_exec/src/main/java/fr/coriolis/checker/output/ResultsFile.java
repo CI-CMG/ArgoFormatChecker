@@ -1,45 +1,38 @@
 package fr.coriolis.checker.output;
 
-import java.io.BufferedWriter;
+import edu.colorado.cires.argonaut.xml.filecheck.Errors;
+import edu.colorado.cires.argonaut.xml.filecheck.FileCheckResults;
+import edu.colorado.cires.argonaut.xml.filecheck.Metadata;
+import edu.colorado.cires.argonaut.xml.filecheck.Warnings;
+import fr.coriolis.checker.validators.ArgoFileValidator;
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.io.StringReader;
-import java.io.StringWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.text.DecimalFormat;
+import java.util.Arrays;
 import java.util.HashSet;
 
-import javax.xml.stream.XMLOutputFactory;
-import javax.xml.stream.XMLStreamException;
-import javax.xml.stream.XMLStreamWriter;
-import javax.xml.transform.ErrorListener;
-import javax.xml.transform.OutputKeys;
-import javax.xml.transform.Result;
-import javax.xml.transform.Source;
-import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerConfigurationException;
-import javax.xml.transform.TransformerException;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.stream.StreamResult;
-import javax.xml.transform.stream.StreamSource;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
+import javax.xml.bind.JAXBContext;
+import javax.xml.bind.JAXBException;
 import fr.coriolis.checker.core.ArgoDataFile;
 import fr.coriolis.checker.core.ArgoDataFile.FileType;
 import fr.coriolis.checker.core.ValidationResult;
 import fr.coriolis.checker.specs.ArgoDate;
-import fr.coriolis.checker.validators.ArgoFileValidator;
+import javax.xml.bind.Marshaller;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-public class ResultsFile {
+public class ResultsFile implements Closeable {
 
 	// ..object variables
 
-	private PrintWriter out;
-	boolean doXml;
-
-	StringWriter stringWriter;
-	XMLStreamWriter xml;
+	private final PrintWriter out;
+	private final boolean doXml;
+  private final FileCheckResults xml;
 
 	// ArgoDataFile argo = null;
 
@@ -47,7 +40,7 @@ public class ResultsFile {
 	private final static DecimalFormat cycleFmt = new DecimalFormat("000");
 	private final static DecimalFormat dFmt = new DecimalFormat("####0.0000;-####0.0000");
 
-	private static final Logger log = LogManager.getLogger("ResultsFile");
+	private static final Logger log = LoggerFactory.getLogger("ResultsFile");
 
 	// .............................................................
 	//
@@ -55,33 +48,18 @@ public class ResultsFile {
 	//
 	// .............................................................
 
-	public ResultsFile(boolean doXml, String resultsFileName, String fcVersion, String spVersion, String inputFileName)
-			throws IOException, XMLStreamException {
-		out = new PrintWriter(new BufferedWriter(new java.io.FileWriter(resultsFileName)));
+	public ResultsFile(boolean doXml, Path resultsFileName, String fcVersion, String spVersion, Path inputFileName)
+			throws IOException {
+		out = new PrintWriter(Files.newBufferedWriter(resultsFileName));
 
 		this.doXml = doXml;
+    xml = new FileCheckResults();
+    xml.setFilecheckerVersion(fcVersion);
+    xml.setSpecVersion(spVersion);
+    xml.setFile(inputFileName.toString());
 
-		if (doXml) {
-			// ......if XML, open the XMLStreamWriter
+		if (!doXml) {
 
-			stringWriter = new StringWriter();
-
-			XMLOutputFactory xMLOutputFactory = XMLOutputFactory.newInstance();
-			xml = xMLOutputFactory.createXMLStreamWriter(stringWriter);
-
-			xml.writeStartDocument();
-
-			xml.writeStartElement("FileCheckResults");
-			xml.writeAttribute("filechecker_version", fcVersion);
-			xml.writeAttribute("spec_version", spVersion);
-
-			xml.writeStartElement("file");
-			xml.writeCharacters(inputFileName);
-			xml.writeEndElement();
-
-			log.debug("...ResultsFile: xml file");
-
-		} else {
 			out.println("VERSION-INFO: FileChecker = '" + fcVersion + "' Specification = '" + spVersion + "'");
 			out.println("FILE-NAME: " + inputFileName);
 			log.debug("...ResultsFile: text file");
@@ -95,135 +73,59 @@ public class ResultsFile {
 	//
 	// .....................................................................
 
+  @Override
 	public void close()
-			throws IOException, XMLStreamException, TransformerConfigurationException, TransformerException {
-		if (out != null) {
+			throws IOException {
 			if (doXml) {
-				xml.writeEndElement();
-				xml.writeEndDocument();
 
-				xml.flush();
-				xml.close();
-
-				String xmlString = stringWriter.getBuffer().toString();
-				stringWriter.close();
-				xmlString = scrubInvalidXmlChar(xmlString);
-
-				Source xmlInput = new StreamSource(new StringReader(xmlString));
-
-				StringWriter stringWriter = new StringWriter();
-				Result xmlOutput = new StreamResult(stringWriter);
-
-				// out.println(xmlString);
-				// out.println();
-				// out.flush();
-
-				log.debug("transform xml");
-
-				TransformerFactory transformerFactory = TransformerFactory.newInstance();
-				transformerFactory.setAttribute("indent-number", 2);
-				Transformer transformer = transformerFactory.newTransformer();
-				transformer.setOutputProperty(OutputKeys.INDENT, "yes");
-				transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
-				transformer.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "2");
-				transformer.setErrorListener(new ErrorListener() {
-					@Override
-					public void error(TransformerException e) throws TransformerException {
-						log.warn(e.getMessage());
-					}
-
-					@Override
-					public void fatalError(TransformerException e) throws TransformerException {
-						log.warn(e.getMessage());
-					}
-
-					@Override
-					public void warning(TransformerException e) throws TransformerException {
-						log.warn(e.getMessage());
-					}
-				});
-
-				try {
-					transformer.transform(xmlInput, xmlOutput);
-				} catch (TransformerException e) {
-					log.warn("Transformer failed, retrying after re-scrubbing", e);
-					// ..tranform exception: probably an invalid character
-					// ..scrub and re-transform
-					xmlString = scrubInvalidXmlChar(xmlString);
-
-					xmlInput = new StreamSource(new StringReader(xmlString));
-
-					stringWriter = new StringWriter();
-					xmlOutput = new StreamResult(stringWriter);
-
-					transformer.transform(xmlInput, xmlOutput);
-					log.debug("close: caught TransformerException - cleaned up input");
-				}
+        try {
+          Marshaller marshaller = JAXBContext.newInstance(FileCheckResults.class).createMarshaller();
+          marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, true);
+          marshaller.marshal(xml, out);
+        } catch (JAXBException e) {
+          throw new IOException("Unable to write XML", e);
+        }
 
 				log.debug("output xml");
-				out.println(stringWriter.toString());
 			}
 			out.close();
-		}
 	} // ..end close
 
-	public void openError(Exception e) throws XMLStreamException {
-		if (doXml) {
-			xml.writeStartElement("status");
-			xml.writeCharacters("ERROR");
-			xml.writeEndElement();
+	public void openError(Exception e) {
+    xml.setStatus("ERROR");
+    xml.setPhase("OPEN-FILE");
 
-			xml.writeStartElement("phase");
-			xml.writeCharacters("OPEN-FILE");
-			xml.writeEndElement();
+    Errors errors = new Errors();
+    xml.setErrors(errors);
+    errors.setNumber(1);
+    errors.getErrors().add(e.toString());
 
-			xml.writeStartElement("errors");
-			xml.writeAttribute("number", "1");
-			xml.writeStartElement("error");
-			xml.writeCharacters(e.toString());
-			xml.writeEndElement();
-			xml.writeEndElement();
-
-		} else {
+		if (!doXml) {
 			out.println("ERROR: Open exception:\n" + e);
 			out.println("PHASE: OPEN-FILE");
 		}
 	} // ..end openError
 
-	public void oldDModeFile(String dacName, String version) throws XMLStreamException {
-		if (doXml) {
-			xml.writeStartElement("status");
-			xml.writeCharacters("FILE-REJECTED");
-			xml.writeEndElement();
+  public void oldDModeFile(String dacName, String version) {
+    xml.setStatus("FILE-REJECTED");
+    xml.setPhase("DMODE-VERSION-CHECK");
 
-			xml.writeStartElement("phase");
-			xml.writeCharacters("DMODE-VERSION-CHECK");
-			xml.writeEndElement();
+    Metadata metadata = new Metadata();
+    xml.setMetadata(metadata);
+    metadata.setDac(dacName);
+    metadata.setDATATYPE("Argo profile");
+    metadata.setFORMATVERSION(version);
 
-			xml.writeStartElement("metadata");
-			xml.writeStartElement("dac");
-			xml.writeCharacters(dacName);
-			xml.writeEndElement();
-			xml.writeStartElement("DATA_TYPE");
-			xml.writeCharacters("Argo profile");
-			xml.writeEndElement();
-			xml.writeStartElement("FORMAT_VERSION");
-			xml.writeCharacters(version);
-			xml.writeEndElement();
-			xml.writeEndElement();
+    Errors errors = new Errors();
+    xml.setErrors(errors);
+    errors.setNumber(1);
+    errors.getErrors().add("D-mode: Version prior to v3.1 is not allowed");
 
-			xml.writeStartElement("errors");
-			xml.writeAttribute("number", "1");
-			xml.writeStartElement("error");
-			xml.writeCharacters("D-mode: Version prior to v3.1 is not allowed");
-			xml.writeEndElement();
-			xml.writeEndElement();
+    Warnings warnings = new Warnings();
+    xml.setWarnings(warnings);
+    warnings.setNumber(0);
 
-			xml.writeStartElement("warnings");
-			xml.writeAttribute("number", "0");
-			xml.writeEndElement();
-
-		} else {
+		if (!doXml) {
 			out.println("STATUS: FILE-REJECTED");
 			out.println("PHASE: DMODE-VERSION-CHECK");
 			out.println("META-DATA: start");
@@ -239,30 +141,20 @@ public class ResultsFile {
 		}
 	} // ..end oldDModeFile
 
-	public void notArgoFile(String dacName) throws XMLStreamException {
-		if (doXml) {
-			xml.writeStartElement("status");
-			xml.writeCharacters("FILE-REJECTED");
-			xml.writeEndElement();
+  public void notArgoFile(String dacName) {
+    xml.setStatus("FILE-REJECTED");
+    xml.setPhase("OPEN-FILE");
 
-			xml.writeStartElement("phase");
-			xml.writeCharacters("OPEN-FILE");
-			xml.writeEndElement();
+    Metadata metadata = new Metadata();
+    xml.setMetadata(metadata);
+    metadata.setDac(dacName);
 
-			xml.writeStartElement("metadata");
-			xml.writeStartElement("dac");
-			xml.writeCharacters(dacName);
-			xml.writeEndElement();
-			xml.writeEndElement();
+    Errors errors = new Errors();
+    xml.setErrors(errors);
+    errors.setNumber(1);
+    errors.getErrors().add(ValidationResult.getMessage());
 
-			xml.writeStartElement("errors");
-			xml.writeAttribute("number", "1");
-			xml.writeStartElement("error");
-			xml.writeCharacters(ValidationResult.getMessage());
-			xml.writeEndElement();
-			xml.writeEndElement();
-
-		} else {
+		if (!doXml) {
 			out.println("STATUS: FILE-REJECTED");
 			out.println("PHASE: OPEN-FILE");
 			out.println("META-DATA: start");
@@ -276,54 +168,36 @@ public class ResultsFile {
 		}
 	} // ..end notArgoFile
 
-	public void formatErrorMessage(String phase) throws XMLStreamException {
-		if (doXml) {
-			xml.writeStartElement("status");
-			xml.writeCharacters("ERROR");
-			xml.writeEndElement();
+  public void formatErrorMessage(String phase) {
+    xml.setStatus("ERROR");
+    xml.setPhase(phase);
 
-			xml.writeStartElement("phase");
-			xml.writeCharacters(phase);
-			xml.writeEndElement();
+    Errors errors = new Errors();
+    xml.setErrors(errors);
+    errors.setNumber(1);
+    errors.getErrors().add("Format check failed. " + ValidationResult.getMessage());
 
-			xml.writeStartElement("errors");
-			xml.writeAttribute("number", "1");
-			xml.writeStartElement("error");
-			xml.writeCharacters("Format check failed. " + ValidationResult.getMessage());
-			xml.writeEndElement();
-			xml.writeEndElement();
-
-		} else {
+		if (!doXml) {
 			out.println("ERROR: Format check failed." + ValidationResult.getMessage());
 			out.println("PHASE: " + phase);
 		}
 	}
 
-	public void dataErrorMessage(String type) throws XMLStreamException {
-		String phase = "DATA-VALIDATION";
+  public void dataErrorMessage(String type) {
+    xml.setStatus("ERROR");
+    xml.setPhase("DATA-VALIDATION");
 
-		if (doXml) {
-			xml.writeStartElement("status");
-			xml.writeCharacters("ERROR");
-			xml.writeEndElement();
+    Errors errors = new Errors();
+    xml.setErrors(errors);
+    errors.setNumber(1);
+    errors.getErrors().add(type + " validation failed. " + ValidationResult.getMessage());
 
-			xml.writeStartElement("phase");
-			xml.writeCharacters(phase);
-			xml.writeEndElement();
-
-			xml.writeStartElement("errors");
-			xml.writeAttribute("number", "1");
-			xml.writeStartElement("error");
-			xml.writeCharacters(type + " validation failed. " + ValidationResult.getMessage());
-			xml.writeEndElement();
-			xml.writeEndElement();
-
-		} else {
+		if (!doXml) {
 			out.println("ERROR: " + type + " validation failed: " + ValidationResult.getMessage());
 		}
 	}
 
-	public void statusAndPhase(boolean accepted, String phase) throws XMLStreamException {
+  public void statusAndPhase(boolean accepted, String phase) {
 		final String acc = "FILE-ACCEPTED";
 		final String rej = "FILE-REJECTED";
 
@@ -334,23 +208,16 @@ public class ResultsFile {
 			status = rej;
 		}
 
-		if (doXml) {
-			xml.writeStartElement("status");
-			xml.writeCharacters(status);
-			xml.writeEndElement();
+    xml.setStatus(status);
+    xml.setPhase(phase);
 
-			xml.writeStartElement("phase");
-			xml.writeCharacters(phase);
-			xml.writeEndElement();
-
-		} else {
+		if (!doXml) {
 			out.println("STATUS: " + status);
 			out.println("PHASE: " + phase);
 		}
 	}
 
-	public void metaData(String dacName, ArgoDataFile argo, boolean formatPassed, boolean doPsalStats)
-			throws XMLStreamException {
+  public void metaData(String dacName, ArgoDataFile argo, boolean formatPassed, boolean doPsalStats) {
 		// ...............report meta-data results...............
 		// ..status is that open was successful
 		// ..- that means identified as Argo netCDF file (DATA_TYPE and FORMAT_VERSION)
@@ -362,14 +229,11 @@ public class ResultsFile {
 		String str;
 		int i;
 
-		if (doXml) {
-			xml.writeStartElement("metadata");
+    Metadata metadata = new Metadata();
+    xml.setMetadata(metadata);
+    metadata.setDac(dacName);
 
-			xml.writeStartElement("dac");
-			xml.writeCharacters(dacName);
-			xml.writeEndElement();
-
-		} else {
+		if (!doXml) {
 			out.println("META-DATA: start");
 			out.println("DAC: " + dacName);
 		}
@@ -401,71 +265,62 @@ public class ResultsFile {
 			break;
 		}
 
-		if (doXml) {
-			xml.writeStartElement("DATA_TYPE");
-			xml.writeCharacters(str);
-			xml.writeEndElement();
+    metadata.setDATATYPE(str);
 
-		} else {
+		if (!doXml) {
 			out.println("TYPE: " + str);
 		}
 		log.debug("meta-data: type = '" + str + "'");
 
-		metaStr(argo, "FORMAT_VERSION", (String) null);
-		metaStr(argo, "DATE_UPDATE", (String) null);
+		metaStr(argo, "FORMAT_VERSION", metadata::setFORMATVERSION);
+		metaStr(argo, "DATE_UPDATE", metadata::setDATEUPDATE);
 
 		if (argo.fileType() == FileType.PROFILE || argo.fileType() == FileType.BIO_PROFILE) {
-			metaStrArray(argo, "DATA_CENTRE", (String) null);
-			metaStrArray(argo, "PLATFORM_NUMBER", (String) null);
-			metaStrArray(argo, "PI_NAME", (String) null);
-			metaStrArray(argo, "WMO_INST_TYPE", (String) null);
-			metaStr(argo, "DATA_MODE", (String) null);
-			metaStr(argo, "DIRECTION", (String) null);
+			metaStrArray(argo, "DATA_CENTRE", metadata::setDATACENTRE);
+			metaStrArray(argo, "PLATFORM_NUMBER", metadata::setPLATFORMNUMBER);
+			metaStrArray(argo, "PI_NAME", metadata::setPINAME);
+			metaStrArray(argo, "WMO_INST_TYPE", metadata::setWMOINSTTYPE);
+			metaStr(argo, "DATA_MODE", metadata::setDATAMODE);
+			metaStr(argo, "DIRECTION", metadata::setDIRECTION);
 
 			if (formatPassed) { // ..skip these if format was bad to prevent potential aborts
 				i = argo.getDimensionLength("N_PROF");
-				if (doXml) {
-					xml.writeStartElement("N_PROF");
-					xml.writeCharacters(Integer.toString(i));
-					xml.writeEndElement();
-				} else {
+        metadata.setNPROF(i);
+				if (!doXml) {
 					out.println("N_PROF: " + i);
 				}
 				log.debug("n_prof: {}", i);
 
 				i = argo.getDimensionLength("N_LEVELS");
-				if (doXml) {
-					xml.writeStartElement("N_LEVELS");
-					xml.writeCharacters(Integer.toString(i));
-					xml.writeEndElement();
-				} else {
+        metadata.setNLEVELS(i);
+				if (!doXml) {
 					out.println("N_LEVELS: " + i);
 				}
 				log.debug("n_levels: {}", i);
 
-				metaIntArray(argo, "CYCLE_NUMBER", cycleFmt);
-				metaTimeArray(argo, "JULD", (String) null);
-				metaDoubleArray(argo, "LATITUDE", dFmt);
-				metaDoubleArray(argo, "LONGITUDE", dFmt);
-				metaStr(argo, "JULD_QC", (String) null);
-				metaStr(argo, "POSITION_QC", (String) null);
+				metaIntArray(argo, "CYCLE_NUMBER", cycleFmt, metadata::setCYCLENUMBER);
+				metaTimeArray(argo, "JULD", metadata::setJULDDtg);
+				metaDoubleArray(argo, "LATITUDE", dFmt, metadata::setLATITUDE);
+				metaDoubleArray(argo, "LONGITUDE", dFmt, metadata::setLONGITUDE);
+				metaStr(argo, "JULD_QC", metadata::setJULDQC);
+				metaStr(argo, "POSITION_QC", metadata::setPOSITIONQC);
 			}
 
-			metaStr(argo, "PROFILE_TEMP_QC", (String) null);
-			metaStr(argo, "PROFILE_PSAL_QC", (String) null);
-			metaStr(argo, "PROFILE_DOXY_QC", (String) null);
-			metaStationParameters(argo);
+			metaStr(argo, "PROFILE_TEMP_QC", metadata::setPROFILETEMPQC);
+			metaStr(argo, "PROFILE_PSAL_QC", metadata::setPROFILEPSALQC);
+			metaStr(argo, "PROFILE_DOXY_QC", metadata::setPROFILEDOXYQC);
+			metaStationParameters(argo, metadata);
 
 			if (formatPassed && argo.fileType() == FileType.PROFILE) {
-				addMetaPsalStats(argo);
+				addMetaPsalStats(argo, metadata);
 			}
 
 		} else if (argo.fileType() == FileType.TRAJECTORY || argo.fileType() == FileType.BIO_TRAJECTORY) {
-			metaStr(argo, "DATA_CENTRE", (String) null);
-			metaStr(argo, "PLATFORM_NUMBER", (String) null);
-			metaStr(argo, "PI_NAME", (String) null);
-			metaStr(argo, "WMO_INST_TYPE", (String) null);
-			metaStr(argo, "DATA_MODE", (String) null);
+			metaStr(argo, "DATA_CENTRE", metadata::setDATACENTRE);
+			metaStr(argo, "PLATFORM_NUMBER", metadata::setPLATFORMNUMBER);
+			metaStr(argo, "PI_NAME", metadata::setPINAME);
+			metaStr(argo, "WMO_INST_TYPE", metadata::setWMOINSTTYPE);
+			metaStr(argo, "DATA_MODE", metadata::setDATAMODE);
 
 			if (formatPassed) { // ..skip these if format was bad to prevent potential aborts
 				double l[], min, max;
@@ -487,20 +342,16 @@ public class ResultsFile {
 					max = 99999.D;
 				}
 
-				if (doXml) {
-					xml.writeStartElement("min_latitude");
-					xml.writeCharacters(dFmt.format(min));
-					xml.writeEndElement();
-				} else {
+        metadata.setMinLatitude(dFmt.format(min));
+
+				if (!doXml) {
 					out.println("MIN-LATITUDE:" + dFmt.format(min));
 				}
 				log.debug("min-latitude: '" + min + "'");
 
-				if (doXml) {
-					xml.writeStartElement("max_latitude");
-					xml.writeCharacters(dFmt.format(max));
-					xml.writeEndElement();
-				} else {
+        metadata.setMaxLatitude(dFmt.format(max));
+
+				if (!doXml) {
 					out.println("MAX-LATITUDE:" + dFmt.format(max));
 				}
 				log.debug("max-latitude: '" + max + "'");
@@ -523,48 +374,42 @@ public class ResultsFile {
 					max = 99999.D;
 				}
 
-				if (doXml) {
-					xml.writeStartElement("min_longitude");
-					xml.writeCharacters(dFmt.format(min));
-					xml.writeEndElement();
-				} else {
+        metadata.setMinLongitude(dFmt.format(min));
+
+				if (!doXml) {
 					out.println("MIN-LONGITUDE:" + dFmt.format(min));
 				}
 				log.debug("min-longitude: '" + min + "'");
 
-				if (doXml) {
-					xml.writeStartElement("max_longitude");
-					xml.writeCharacters(dFmt.format(max));
-					xml.writeEndElement();
-				} else {
+        metadata.setMaxLongitude(dFmt.format(max));
+
+				if (!doXml) {
 					out.println("MAX-LONGITUDE:" + dFmt.format(max));
 				}
 				log.debug("max-longitude: '" + max + "'");
 
 				if (argo.fileType() == FileType.BIO_TRAJECTORY) {
-					metaTrajectoryParameters(argo);
+					metaTrajectoryParameters(argo, metadata);
 				}
 			}
 
 		} else if (argo.fileType() == FileType.METADATA) {
-			metaStr(argo, "DATA_CENTRE", (String) null);
-			metaStr(argo, "PLATFORM_NUMBER", (String) null);
-			metaStr(argo, "PI_NAME", (String) null);
-			metaStr(argo, "WMO_INST_TYPE", (String) null);
+			metaStr(argo, "DATA_CENTRE", metadata::setDATACENTRE);
+			metaStr(argo, "PLATFORM_NUMBER", metadata::setPLATFORMNUMBER);
+			metaStr(argo, "PI_NAME", metadata::setPINAME);
+			metaStr(argo, "WMO_INST_TYPE", metadata::setWMOINSTTYPE);
 
 		} else if (argo.fileType() == FileType.TECHNICAL) {
-			metaStr(argo, "DATA_CENTRE", (String) null);
-			metaStr(argo, "PLATFORM_NUMBER", (String) null);
+      metaStr(argo, "DATA_CENTRE", metadata::setDATACENTRE);
+      metaStr(argo, "PLATFORM_NUMBER", metadata::setPLATFORMNUMBER);
 		}
 
-		if (doXml) {
-			xml.writeEndElement();
-		} else {
+		if (!doXml) {
 			out.println("META-DATA: end");
 		}
 	} // ..end metaData
 
-	public void addMetaPsalStats(ArgoDataFile argo) throws XMLStreamException {
+  private void addMetaPsalStats(ArgoDataFile argo, Metadata metadata) {
 		// ...............report PSAL adjustment statistics...............
 		// ..assumes:
 		// ..- Argo-open was successful
@@ -576,55 +421,51 @@ public class ResultsFile {
 		double[] arr1 = { stats[0] };
 		double[] arr2 = { stats[1] };
 
-		metaDoubleValArray(arr1, "psal-adj-mean", dFmt);
-		metaDoubleValArray(arr2, "psal-adj-sdev", dFmt);
+		metaDoubleValArray(arr1, "psal-adj-mean", dFmt, metadata::setPsalAdjMean);
+		metaDoubleValArray(arr2, "psal-adj-sdev", dFmt,  metadata::setPsalAdjSdev);
 
 	}// ..end addMetaPsalStats
 
 	// ************************** errorsAndWarnings ************************
 
-	public void errorsAndWarnings(ArgoFileValidator argoFileValidator) throws XMLStreamException {
-		if (doXml) {
-			xml.writeStartElement("errors");
-			xml.writeAttribute("number", Integer.toString(argoFileValidator.getValidationResult().nFormatErrors()));
-		} else {
+  public void errorsAndWarnings(ArgoFileValidator argoFileValidator) {
+
+    Errors errors = new Errors();
+    xml.setErrors(errors);
+    errors.setNumber(argoFileValidator.getValidationResult().nFormatErrors());
+
+		if (!doXml) {
 			out.println("FORMAT-ERRORS: start");
 		}
 		log.debug("format errors:" + argoFileValidator.getValidationResult().nFormatErrors());
 
 		for (String err : argoFileValidator.getValidationResult().getErrors()) {
-			if (doXml) {
-				xml.writeStartElement("error");
-				xml.writeCharacters(err);
-				xml.writeEndElement();
-			} else {
+      errors.getErrors().add(err);
+			if (!doXml) {
 				out.println(err + "\n");
 			}
 			log.debug(err);
 		}
 
-		if (doXml) {
-			xml.writeEndElement();
-		} else {
+		if (!doXml) {
 			out.println("FORMAT-ERRORS: end");
 		}
 		log.debug("...end errors");
 
 		// ...............report warnings................
-		if (doXml) {
-			xml.writeStartElement("warnings");
-			xml.writeAttribute("number", Integer.toString(argoFileValidator.getValidationResult().nFormatWarnings()));
-		} else {
+
+    Warnings warnings = new Warnings();
+    xml.setWarnings(warnings);
+    warnings.setNumber(argoFileValidator.getValidationResult().nFormatWarnings());
+
+		if (!doXml) {
 			out.println("FORMAT-WARNINGS: start");
 		}
 		log.debug("format warnings: " + argoFileValidator.getValidationResult().nFormatWarnings());
 
 		for (String err : argoFileValidator.getValidationResult().getWarnings()) {
-			if (doXml) {
-				xml.writeStartElement("warning");
-				xml.writeCharacters(err);
-				xml.writeEndElement();
-			} else {
+      warnings.getWarnings().add(err);
+			if (!doXml) {
 				out.println(err + "\n");
 			}
 			log.debug(err);
@@ -639,255 +480,136 @@ public class ResultsFile {
 
 	// ************************** metaStr **************************
 
-	private void metaStr(ArgoDataFile argo, String var, String fmt) throws XMLStreamException {
+  private void metaStr(ArgoDataFile argo, String var, Consumer<String> setter) {
+    metaStr(argo, var, null, setter);
+  }
+
+	private void metaStr(ArgoDataFile argo, String var, String fmt, Consumer<String> setter) {
 		String str = argo.readString(var);
 		if (str == null) {
 			str = "null";
 		}
 
-		if (doXml) {
-			xml.writeStartElement(var);
-		} else {
+		if (!doXml) {
 			out.print(var + ": ");
 		}
 
-		if (fmt == null) {
-			if (doXml) {
-				xml.writeCharacters(str);
-				xml.writeEndElement();
-			} else {
-				out.println(str);
-			}
+    String value = fmt == null ? str : String.format(fmt, str);
+    setter.accept(value.trim());
 
-		} else {
-			if (doXml) {
-				xml.writeCharacters(String.format(fmt, str));
-				xml.writeEndElement();
-			} else {
-				out.println(String.format(fmt, str));
-			}
-		}
+    if (!doXml) {
+      out.println(value);
+    }
 
 		log.debug("meta-data: '" + var + "' = '" + str + "' (single string)");
 	}// ..end metaStr
 
 	// ************************ metaStrArray ****************************
 
-	private void metaStrArray(ArgoDataFile argo, String var, String fmt) throws XMLStreamException {
+  private void metaStrArray(ArgoDataFile argo, String var, Consumer<String> setter) {
+    metaStrArray(argo, var, null, setter);
+  }
+
+	private void metaStrArray(ArgoDataFile argo, String var, String fmt, Consumer<String> setter) {
 		String arr[] = argo.readStringArr(var);
 
-		if (doXml) {
-			xml.writeStartElement(var);
-		} else {
+		if (!doXml) {
 			out.print(var + ":");
 		}
 
-		if (fmt == null) {
-			char comma = ' ';
-			for (String val : arr) {
-				if (doXml) {
-					xml.writeCharacters(comma + val.trim());
-				} else {
-					out.print(comma + val.trim());
-				}
-				comma = ',';
-			}
+    String value = Arrays.stream(arr)
+        .map(String::trim)
+        .map(val -> fmt == null ? val : String.format(fmt, val))
+        .collect(Collectors.joining(","));
 
-		} else {
-			char comma = ' ';
-			for (String val : arr) {
-				if (doXml) {
-					xml.writeCharacters(comma + String.format(fmt, val.trim()));
-				} else {
-					out.print(comma + String.format(fmt, val.trim()));
-				}
-				comma = ',';
-			}
-		}
+    setter.accept(value);
 
-		if (doXml) {
-			xml.writeEndElement();
-		} else {
-			out.println();
-		}
+    if (!doXml) {
+      out.println(value);
+    }
+
 		log.debug("meta-data: '" + var + "' (string array)");
 	}
 
 	// ********************* metaIntArray *******************************
 
-	private void metaIntArray(ArgoDataFile argo, String var, DecimalFormat fmt) throws XMLStreamException {
+	private void metaIntArray(ArgoDataFile argo, String var, DecimalFormat fmt, Consumer<String> setter) {
 		int[] arr = argo.readIntArr(var);
 
-		if (doXml) {
-			xml.writeStartElement(var);
-		} else {
+		if (!doXml) {
 			out.print(var + ":");
 		}
 
-		if (fmt == null) {
-			char comma = ' ';
-			for (int val : arr) {
-				if (doXml) {
-					xml.writeCharacters(comma + Integer.toString(val));
-				} else {
-					out.print(comma + val);
-				}
-				comma = ',';
-			}
+    String value = Arrays.stream(arr)
+        .mapToObj(val -> fmt == null ? Integer.toString(val) : fmt.format(val))
+        .collect(Collectors.joining(","));
 
-		} else {
-			char comma = ' ';
-			for (int val : arr) {
-				if (doXml) {
-					xml.writeCharacters(comma + fmt.format(val));
-				} else {
-					out.print(comma + fmt.format(val));
-				}
-				comma = ',';
-			}
-		}
+    setter.accept(value);
 
-		if (doXml) {
-			xml.writeEndElement();
-		} else {
-			out.println();
-		}
+    if (!doXml) {
+      out.println(value);
+    }
+
 		log.debug("meta-data: '" + var + "'");
 	}// ..end metaIntArray
 
 	// ******************** metaDoubleArray ********************************
 
-	private void metaDoubleArray(ArgoDataFile argo, String var, DecimalFormat fmt) throws XMLStreamException {
-		double[] arr = argo.readDoubleArr(var);
-
-		if (doXml) {
-			xml.writeStartElement(var);
-		} else {
-			out.print(var + ":");
-		}
-
-		if (fmt == null) {
-			char comma = ' ';
-			for (double val : arr) {
-				if (doXml) {
-					xml.writeCharacters(comma + Double.toString(val));
-				} else {
-					out.print(comma + val);
-				}
-				comma = ',';
-			}
-
-		} else {
-			char comma = ' ';
-			for (double val : arr) {
-				if (doXml) {
-					xml.writeCharacters(comma + fmt.format(val));
-				} else {
-					out.print(comma + fmt.format(val));
-				}
-				comma = ',';
-			}
-		}
-
-		if (doXml) {
-			xml.writeEndElement();
-		} else {
-			out.println();
-		}
-
-		log.debug("meta-data: '" + var + "'");
+	private void metaDoubleArray(ArgoDataFile argo, String var, DecimalFormat fmt, Consumer<String> setter) {
+    metaDoubleValArray(argo.readDoubleArr(var), var, fmt, setter);
 	}
 
 	// ******************** metaDoubleValArray ********************************
 
-	private void metaDoubleValArray(double[] arr, String var, DecimalFormat fmt) throws XMLStreamException {
-		if (doXml) {
-			xml.writeStartElement(var);
-		} else {
-			out.print(var + ":");
-		}
+	private void metaDoubleValArray(double[] arr, String var, DecimalFormat fmt, Consumer<String> setter) {
 
-		if (fmt == null) {
-			char comma = ' ';
+    if (!doXml) {
+      out.print(var + ":");
+    }
 
-			for (double val : arr) {
-				if (doXml) {
-					xml.writeCharacters(comma + Double.toString(val));
-				} else {
-					out.print(comma + val);
-				}
-				comma = ',';
-			}
+    String value = Arrays.stream(arr)
+        .mapToObj(val -> fmt == null ? Double.toString(val) : fmt.format(val))
+        .collect(Collectors.joining(","));
 
-		} else {
-			char comma = ' ';
-			for (double val : arr) {
-				if (doXml) {
-					xml.writeCharacters(comma + fmt.format(val));
-				} else {
-					out.print(comma + fmt.format(val));
-				}
-				comma = ',';
-			}
-		}
+    setter.accept(value);
 
-		if (doXml) {
-			xml.writeEndElement();
-		} else {
-			out.println();
-		}
+    if (!doXml) {
+      out.println(value);
+    }
 
-		log.debug("meta-data: '" + var + "'");
+    log.debug("meta-data: '" + var + "'");
 	}// ..end metaDoubleVal
 
 	// ************************** metaTimeArray *************************
 
-	private void metaTimeArray(ArgoDataFile argo, String var, String fmt) throws XMLStreamException {
+  private void metaTimeArray(ArgoDataFile argo, String var, Consumer<String> setter)  {
+    metaTimeArray(argo, var, null, setter);
+  }
+
+	private void metaTimeArray(ArgoDataFile argo, String var, String fmt, Consumer<String> setter)  {
 		double[] arr = argo.readDoubleArr(var);
 
-		if (doXml) {
-			xml.writeStartElement(var + "-dtg");
-		} else {
+		if (!doXml) {
 			out.print(var + "-DTG:");
 		}
 
-		if (fmt == null) {
-			char comma = ' ';
-			for (double val : arr) {
-				String str = ArgoDate.format(ArgoDate.get(val));
-				if (doXml) {
-					xml.writeCharacters(comma + str);
-				} else {
-					out.print(comma + str);
-				}
-				comma = ',';
-			}
+    String value = Arrays.stream(arr)
+        .mapToObj(val -> ArgoDate.format(ArgoDate.get(val)))
+        .map(val -> fmt == null ? val : String.format(val, val))
+        .collect(Collectors.joining(","));
 
-		} else {
-			char comma = ' ';
-			for (double val : arr) {
-				String str = ArgoDate.format(ArgoDate.get(val));
-				if (doXml) {
-					xml.writeCharacters(comma + String.format(str, val));
-				} else {
-					out.print(comma + String.format(str, val));
-				}
-				comma = ',';
-			}
-		}
+    setter.accept(value);
 
-		if (doXml) {
-			xml.writeEndElement();
-		} else {
-			out.println();
-		}
+    if (!doXml) {
+      out.println(value);
+    }
 
 		log.debug("meta-data: '" + var + "'");
 	}// ..end metaTimeArray
 
 	// ************************** metaStationParameters *************************
 
-	private void metaStationParameters(ArgoDataFile argo) throws XMLStreamException {
+	private void metaStationParameters(ArgoDataFile argo, Metadata metadata) {
 		int n_prof = argo.getDimensionLength("N_PROF");
 		int n_param = argo.getDimensionLength("N_PARAM");
 		if (n_prof < 0 || n_param < 0) {
@@ -934,33 +656,22 @@ public class ResultsFile {
 			}
 		}
 
-		if (doXml) {
-			xml.writeStartElement("STATION_PARAMETERS");
-		} else {
+    metadata.setSTATIONPARAMETERS(list == null ? null : list.toString());
+
+		if (!doXml) {
 			out.print("STATION_PARAMETERS: ");
 		}
 
-		if (list != null) {
-			if (doXml) {
-				xml.writeCharacters(list.toString());
-				xml.writeEndElement();
-			} else {
-				out.println(list);
-			}
+		if (list != null && !doXml) {
+      out.println(list);
 		}
 
 		if (pMode != null) {
-			if (doXml) {
-				xml.writeStartElement("PARAMETER_DATA_MODE");
-			} else {
-				out.print("PARAMETER_DATA_MODE: ");
-			}
+      metadata.setPARAMETERDATAMODE(pMode.toString());
 
-			if (doXml) {
-				xml.writeCharacters(pMode.toString());
-				xml.writeEndElement();
-			} else {
-				out.println(pMode);
+			if (!doXml) {
+				out.print("PARAMETER_DATA_MODE: ");
+        out.println(pMode);
 			}
 		}
 
@@ -969,7 +680,7 @@ public class ResultsFile {
 
 	// ************************** metaTrajectoryParameters *************************
 
-	private void metaTrajectoryParameters(ArgoDataFile argo) throws XMLStreamException {
+	private void metaTrajectoryParameters(ArgoDataFile argo, Metadata metadata) {
 		int n_param = argo.getDimensionLength("N_PARAM");
 		if (n_param < 0) {
 			return;
@@ -1008,33 +719,21 @@ public class ResultsFile {
 			}
 		}
 
-		if (doXml) {
-			xml.writeStartElement("STATION_PARAMETERS");
-		} else {
+    metadata.setSTATIONPARAMETERS(list == null ? null : list.toString());
+
+		if (!doXml) {
 			out.print("STATION_PARAMETERS: ");
 		}
 
-		if (list != null) {
-			if (doXml) {
-				xml.writeCharacters(list.toString());
-				xml.writeEndElement();
-			} else {
-				out.println(list);
-			}
+		if (list != null && !doXml) {
+      out.println(list);
 		}
 
 		if (pMode != null) {
-			if (doXml) {
-				xml.writeStartElement("PARAMETER_DATA_MODE");
-			} else {
+      metadata.setPARAMETERDATAMODE(pMode.toString());
+			if (!doXml) {
 				out.print("PARAMETER_DATA_MODE: ");
-			}
-
-			if (doXml) {
-				xml.writeCharacters(pMode.toString());
-				xml.writeEndElement();
-			} else {
-				out.println(pMode);
+        out.println(pMode);
 			}
 		}
 
@@ -1042,7 +741,7 @@ public class ResultsFile {
 	}// ..end metaTrajectoryParameters
 
 	// ************************** convenience methods ******************************
-	private String scrubInvalidXmlChar(String input) {
+	private static String scrubInvalidXmlChar(String input) {
 		if (input == null) {
 			return null;
 		}

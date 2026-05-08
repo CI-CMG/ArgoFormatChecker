@@ -1,15 +1,11 @@
 package fr.coriolis.checker.validators;
 
 import java.io.IOException;
-import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import fr.coriolis.checker.core.ArgoDataFile;
 import fr.coriolis.checker.core.ArgoDataFile.FileType;
@@ -17,6 +13,8 @@ import fr.coriolis.checker.specs.ArgoDate;
 import fr.coriolis.checker.specs.ArgoReferenceTable;
 import fr.coriolis.checker.tables.ArgoNVSReferenceTable;
 import fr.coriolis.checker.tables.SkosConcept;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import ucar.ma2.Array;
 import ucar.ma2.DataType;
 import ucar.ma2.Index;
@@ -41,28 +39,26 @@ import ucar.nc2.Variable;
  * @version $Id: ArgoTrajectoryFile.java 1269 2021-06-14 20:34:45Z ignaszewski $
  */
 
-public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
+public class ArgoTrajectoryFileValidator extends BaseArgoFileValidator {
 	// .......................................
 	// VARIABLES
 	// .......................................
 
-	// ..standard i/o shortcuts
-	private static PrintStream stderr = new PrintStream(System.err);
-	private static final Logger log = LogManager.getLogger("ArgoTrajectoryFileValidator");
+	private static final Logger log = LoggerFactory.getLogger("ArgoTrajectoryFileValidator");
 
 	private final static int fillCycNum = 99999;
 
-	private final static String goodJuldQC = new String("01258");
+	private final static String goodJuldQC = "01258";
 
 	// .......................................
 	// CONSTRUCTORS
 	// .......................................
 
-	public ArgoTrajectoryFileValidator(ArgoDataFile arFile) throws IOException {
-		super(arFile);
+	public ArgoTrajectoryFileValidator(ArgoDataFile arFile, ArgoNVSReferenceTable argoNVSReferenceTable) {
+		super(arFile, argoNVSReferenceTable);
 	}
 
-	/**
+  /**
 	 * Validates the data in the trajectory file. This is a driver routine that
 	 * performs all types of validations (see other validate* routines).
 	 *
@@ -98,8 +94,9 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 	 *         reason).
 	 * @throws IOException If an I/O error occurs
 	 */
+  @Override
 	public boolean validateData(String dacName, boolean ckNulls) throws IOException {
-		boolean basicsChecks = super.basicDataValidation(ckNulls);
+		boolean basicsChecks = basicDataValidation(ckNulls);
 		if (!basicsChecks) {
 			return false;
 		}
@@ -206,11 +203,11 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 	 *                                for CYCLE_NUMBER_INDEX
 	 * @param mode_nMeasure           char array of the data_mode values mapped onto
 	 *                                [N_MEASUREMENT]
-	 * @throws IOException If an I/O error occurs
+	 *
 	 */
 
-	public boolean validateCycleNumber(int nMeasure, int nCycle, char overallDM, char[] data_mode,
-			HashMap<Integer, Integer> CycNumIndex_cycle2index, char[] mode_nMeasure) throws IOException {
+	private boolean validateCycleNumber(int nMeasure, int nCycle, char overallDM, char[] data_mode,
+			HashMap<Integer, Integer> CycNumIndex_cycle2index, char[] mode_nMeasure)  {
 		log.debug(".....validateCycleNumber: start.....");
 		log.debug("nMeasure, nCycle = {}, {}", nMeasure, nCycle);
 
@@ -697,7 +694,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 	 *         otherwise)
 	 * @throws IOException If an I/O error occurs
 	 */
-	public char validateDataMode(char[] mode) throws IOException {
+	private char validateDataMode(char[] mode) {
 		log.debug(".....validateDataMode: start.....");
 
 		// .....get DATA_MODE and check it as long we're at it.....
@@ -748,13 +745,12 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 	 * Upon completion <i>obj</i>.nFormatErrors(), <i>obj</i>.nFormatWarnings,
 	 * <i>obj</i>.formatErrors(), and <i>obj</i>.formatWarnings will return results.
 	 *
-	 * @param nProf    the number of profiles in the file
+	 *
 	 * @param nParam   the number of parameters in the file
-	 * @param nCalib   the number of calibration records in the file
 	 * @param nHistory the number of history records in the file
-	 * @throws IOException If an I/O error occurs
+	 *
 	 */
-	public void validateDates(int nParam, int nHistory) throws IOException {
+	private void validateDates(int nParam, int nHistory) {
 		log.debug(".....validateDates: start.....");
 
 		// ..check Reference_Date
@@ -773,7 +769,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 
 		Date fileTime = new Date(arFile.getFile().lastModified());
 		// ...........creation and update dates checks:.............
-		super.validateCreationUpdateDates(fileTime);
+		validateCreationUpdateDates(fileTime);
 
 		// ...................history date checks...................
 		// ..if set, after DATE_CREATION, before DATE_UPSATE
@@ -832,12 +828,12 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 	 * @param mode_nMeasure DATA_MODE mapped into [N_MEASUREMENT] space
 	 * @param fv            (OUTPUT!) Information for later processing
 	 * @return true = checks passed; false = checks failed
-	 * @throws IOException If an I/O error occurs
+	 *
 	 */
 
-	public boolean validateMC_and_JULD(int nMeasure, char[] mode_nMeasure,
+	private boolean validateMC_and_JULD(int nMeasure, char[] mode_nMeasure,
 			// HashMap<Integer, Integer>CycNumIndex_cycle2index,
-			Final_NMeasurement_Variables[] fv) throws IOException {
+			Final_NMeasurement_Variables[] fv) {
 		log.debug(".....validateMC_and_JULD: start.....");
 		log.debug("nMeasure = {}", nMeasure);
 
@@ -936,7 +932,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 				// =======
 				// CK_0227
 				// =======
-				tableEntry = ArgoNVSReferenceTable.MEASUREMENT_CODE_ID_TABLE.getConceptMembersByAltLabelMap()
+				tableEntry = argoNVSReferenceTable.getMEASUREMENT_CODE_ID_TABLE().getConceptMembersByAltLabelMap()
 						.get(String.valueOf(m_code[n]));
 				if (tableEntry != null) {
 					// =======
@@ -1000,7 +996,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 		for (int n = 0; n < nMeasure; n++) {
 
 			if (juld_qc[n] != ' ') {
-				tableEntry = ArgoNVSReferenceTable.DM_QC_FLAG_TABLE.getConceptMembersByAltLabelMap()
+				tableEntry = argoNVSReferenceTable.getDM_QC_FLAG_TABLE().getConceptMembersByAltLabelMap()
 						.get(String.valueOf(juld_qc[n]));
 				// =======
 				// CK_0229
@@ -1018,7 +1014,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 			}
 
 			if (juld_status[n] != ' ') {
-				tableEntry = ArgoNVSReferenceTable.STATUS_TABLE.getConceptMembersByAltLabelMap()
+				tableEntry = argoNVSReferenceTable.getSTATUS_TABLE().getConceptMembersByAltLabelMap()
 						.get(String.valueOf(juld_status[n]));
 				// =======
 				// CK_0231
@@ -1059,7 +1055,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 			// =======
 			// CK_0234
 			// =======
-			if (ArgoFileValidator.is_999_999_FillValue(juld[n])) {
+			if (is_999_999_FillValue(juld[n])) {
 				// ..data is missing - QC better be too
 				if (!(juld_qc[n] == '9' || juld_qc[n] == ' ')) {
 					notMiss.increment(n);
@@ -1185,7 +1181,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 
 			for (int n = 0; n < nMeasure; n++) {
 				if (juld_adj_qc[n] != ' ') {
-					tableEntry = ArgoNVSReferenceTable.DM_QC_FLAG_TABLE.getConceptMembersByAltLabelMap()
+					tableEntry = argoNVSReferenceTable.getDM_QC_FLAG_TABLE().getConceptMembersByAltLabelMap()
 							.get(String.valueOf(juld_adj_qc[n]));
 					// =======
 					// CK_0238
@@ -1204,7 +1200,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 				}
 
 				if (juld_adj_status[n] != ' ') {
-					tableEntry = ArgoNVSReferenceTable.STATUS_TABLE.getConceptMembersByAltLabelMap()
+					tableEntry = argoNVSReferenceTable.getSTATUS_TABLE().getConceptMembersByAltLabelMap()
 							.get(String.valueOf(juld_adj_status[n]));
 					// =======
 					// CK_0240
@@ -1254,7 +1250,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 				// =======
 				// CK_0243
 				// =======
-				if (ArgoFileValidator.is_999_999_FillValue(juld_adj[n])) {
+				if (is_999_999_FillValue(juld_adj[n])) {
 					// ..data is missing - QC better be too
 					if (!(juld_adj_qc[n] == '9' || juld_adj_qc[n] == ' ')) {
 						notMiss.increment(n);
@@ -1275,7 +1271,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 					// ..case 2: juld not missing, juld_adj not missing:
 					// .. - mode = 'A' or 'D'
 
-					if (!ArgoFileValidator.is_999_999_FillValue(juld[n])) {
+					if (!is_999_999_FillValue(juld[n])) {
 						// ..juld not missing, juld_adj not missing -- mode must be 'A' or 'D'
 
 						// ..but ignore the "launch cycle" (-1)
@@ -1394,7 +1390,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 			if (qc_index >= 0) {
 				// ..QC indicates "good"
 
-				if (!ArgoFileValidator.is_999_999_FillValue(juld[n])) {
+				if (!is_999_999_FillValue(juld[n])) {
 
 					// ..check that JULD is after earliestDate and before DATE_UPDATE
 
@@ -1426,7 +1422,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 				qc_index = goodJuldQC.indexOf(juld_adj_qc[n]);
 
 				if (qc_index >= 0) {
-					if (!ArgoFileValidator.is_999_999_FillValue(juld_adj[n])) {
+					if (!is_999_999_FillValue(juld_adj[n])) {
 
 						// ..check that JULD_ADJUSTED is after earliestDate and before DATE_UPDATE
 
@@ -1483,7 +1479,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 			// ..juld_adj is not in bio-trajectory
 
 			if (core) {
-				if (ArgoFileValidator.is_999_999_FillValue(juld_adj[n])) {
+				if (is_999_999_FillValue(juld_adj[n])) {
 					fv[n].juld = juld[n];
 					fv[n].juld_status = juld_status[n];
 					fv[n].juld_qc = juld_qc[n];
@@ -1520,12 +1516,12 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 	 * Upon completion <i>obj</i>.nFormatErrors(), <i>obj</i>.nFormatWarnings,
 	 * <i>obj</i>.formatErrors(), and <i>obj</i>.formatWarnings will return results.
 	 *
-	 * @param nProf the number of profiles in the file
+	 *
 	 * @param dac   the ArgoReferenceTable.DACS dac indicator. If <i>null</i> the
 	 *              DATA_CENTRE cannont be validated.
 	 * @throws IOException If an I/O error occurs
 	 */
-	public boolean validateMetaData(ArgoReferenceTable.DACS dac) throws IOException {
+	private boolean validateMetaData(ArgoReferenceTable.DACS dac) throws IOException {
 		log.debug(".....validateMetaData: start.....");
 
 		ArgoReferenceTable.ArgoReferenceEntry info;
@@ -1537,18 +1533,18 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 
 		name = "PLATFORM_NUMBER"; // ..valid wmo id
 		str = arFile.readString(name).trim();
-		if (!super.validatePlatfomNumber(str)) {
+		if (!validatePlatfomNumber(str)) {
 			validationResult.addError("PLATFORM_NUMBER" + ": '" + str + "': Invalid");
 		}
 
 		// DATA_CENTRE
-		super.validateDataCentre(dac);
+		validateDataCentre(dac);
 
 		name = "DATA_STATE_INDICATOR"; // ..ref table 6
 		str = arFile.readString(name).trim();
 		log.debug("{}: '{}'", name, str);
 
-		tableEntry = ArgoNVSReferenceTable.DATA_STATE_INDICATOR_TABLE.getConceptMembersByAltLabelMap().get(str);
+		tableEntry = argoNVSReferenceTable.getDATA_STATE_INDICATOR_TABLE().getConceptMembersByAltLabelMap().get(str);
 		// =======
 		// CK_0200
 		// =======
@@ -1587,7 +1583,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 		str = arFile.readString(name).trim();
 		log.debug("{}: '{}'", name, str);
 
-		tableEntry = ArgoNVSReferenceTable.PLATFORM_TYPE_TABLE.getConceptMembersByAltLabelMap().get(str);
+		tableEntry = argoNVSReferenceTable.getPLATFORM_TYPE_TABLE().getConceptMembersByAltLabelMap().get(str);
 		// =======
 		// CK_0045
 		// =======
@@ -1606,7 +1602,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 		name = "POSITIONING_SYSTEM"; // ..ref table 9
 		str = arFile.readString(name).trim();
 		log.debug(name + ": '{}'", str);
-		tableEntry = ArgoNVSReferenceTable.POSITIONING_SYSTEM_TABLE.getConceptMembersByAltLabelMap().get(str);
+		tableEntry = argoNVSReferenceTable.getPOSITIONING_SYSTEM_TABLE().getConceptMembersByAltLabelMap().get(str);
 		// =======
 		// CK_0204
 		// =======
@@ -1638,7 +1634,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 				// =======
 				int N = Integer.valueOf(str);
 
-				tableEntry = ArgoNVSReferenceTable.ARGO_WMO_INST_TYPE_TABLE.getConceptMembersByAltLabelMap().get(str);
+				tableEntry = argoNVSReferenceTable.getARGO_WMO_INST_TYPE_TABLE().getConceptMembersByAltLabelMap().get(str);
 				// =======
 				// CK_0208
 				// =======
@@ -1669,7 +1665,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 	 *
 	 */
 
-	public void validateNCycle(int nCycle, char[] mode) {
+	private void validateNCycle(int nCycle, char[] mode) {
 		log.debug(".....validateNCycle: start.....");
 
 		String varName;
@@ -1683,7 +1679,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 			String g = arFile.readString(varName, true); // ..true -> include any NULLs
 
 			for (int n = 0; n < nCycle; n++) {
-				SkosConcept tableEntry = ArgoNVSReferenceTable.GROUNDED_TABLE.getConceptMembersByAltLabelMap()
+				SkosConcept tableEntry = argoNVSReferenceTable.getGROUNDED_TABLE().getConceptMembersByAltLabelMap()
 						.get(String.valueOf(g.charAt(n)));
 				// =======
 				// CK_0289
@@ -1754,7 +1750,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 	 * </ul>
 	 */
 
-	public void validateNCycleJuld(int nMeasure, int nCycle, // char[] mode,
+	private void validateNCycleJuld(int nMeasure, int nCycle, // char[] mode,
 			HashMap<Integer, Integer> CycNumIndex_cycle2index, Final_NMeasurement_Variables[] finalNMVar) {
 		log.debug(".....validateNCycleJuld: start.....");
 
@@ -1936,7 +1932,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 				if (!juldCheck.checked[n]) {
 					// ..this value wasn't compared to a JULD value
 
-					if (!ArgoFileValidator.is_999_999_FillValue(juldVar[n])) {
+					if (!is_999_999_FillValue(juldVar[n])) {
 						notJuld++;
 						if (a_notJuld < 0) {
 							a_notJuld = n + 1;
@@ -2018,7 +2014,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 	 * @throws IOException If an I/O error occurs
 	 */
 
-	public void validateParams(int nMeasure, char[] mode_nMeasure, ArrayList<String> paramList) throws IOException {
+	private void validateParams(int nMeasure, char[] mode_nMeasure, ArrayList<String> paramList) throws IOException {
 		log.debug(".....validateParams: start.....");
 		log.debug("nMeasure = {}", nMeasure);
 
@@ -2068,8 +2064,8 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 				array = var.read();
 
 			} catch (Exception e) {
-				stderr.println(e.getMessage());
-				e.printStackTrace(stderr);
+				System.err.println(e.getMessage());
+				e.printStackTrace(System.err);
 				throw new IOException("Unable to read '" + var.getShortName() + "'");
 			}
 
@@ -2169,7 +2165,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 				}
 
 				if (prm_qc != null) {
-					tableEntry = ArgoNVSReferenceTable.DM_QC_FLAG_TABLE.getConceptMembersByAltLabelMap()
+					tableEntry = argoNVSReferenceTable.getDM_QC_FLAG_TABLE().getConceptMembersByAltLabelMap()
 							.get(String.valueOf(prm_qc[n]));
 					// =======
 					// CK_0261
@@ -2185,7 +2181,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 						// =======
 						// CK_0263
 						// =======
-						if (ArgoFileValidator.is_FillValue(fValue, prm[n])) {
+						if (is_FillValue(fValue, prm[n])) {
 							// ..data is missing - QC better be too
 							if (prm_qc[n] != '9' && prm_qc[n] != ' ') {
 								notMiss.increment(n);
@@ -2285,8 +2281,8 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 				array = var.read();
 
 			} catch (Exception e) {
-				stderr.println(e.getMessage());
-				e.printStackTrace(stderr);
+        System.err.println(e.getMessage());
+				e.printStackTrace(System.err);
 				throw new IOException("Unable to read '" + var.getShortName() + "'");
 			}
 
@@ -2336,8 +2332,8 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 				array = varErr.read();
 
 			} catch (Exception e) {
-				stderr.println(e.getMessage());
-				e.printStackTrace(stderr);
+        System.err.println(e.getMessage());
+				e.printStackTrace(System.err);
 				throw new IOException("Unable to read '" + varErr.getShortName() + "'");
 			}
 
@@ -2417,7 +2413,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 					// =======
 					// CK_0269
 					// =======
-					if (!ArgoFileValidator.is_FillValue(fValue, prm_adj[n])) {
+					if (!is_FillValue(fValue, prm_adj[n])) {
 						rNotMiss.increment(n);
 					}
 					// =======
@@ -2429,7 +2425,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 					// =======
 					// CK_0271
 					// =======
-					if (!ArgoFileValidator.is_FillValue(fValue, prm_adj_err[n])) {
+					if (!is_FillValue(fValue, prm_adj_err[n])) {
 						rErrNotMiss.increment(n);
 					}
 
@@ -2441,7 +2437,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 
 					if (prm_adj_qc[n] != ' ') {
 
-						tableEntry = ArgoNVSReferenceTable.DM_QC_FLAG_TABLE.getConceptMembersByAltLabelMap()
+						tableEntry = argoNVSReferenceTable.getDM_QC_FLAG_TABLE().getConceptMembersByAltLabelMap()
 								.get(String.valueOf(prm_adj_qc[n]));
 						// =======
 						// CK_0272
@@ -2472,7 +2468,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 							// =======
 							// CK_0275
 							// =======
-							if (!ArgoFileValidator.is_FillValue(fValue, prm_adj[n])) {
+							if (!is_FillValue(fValue, prm_adj[n])) {
 								notNotMeas.increment(n);
 							}
 						}
@@ -2481,12 +2477,12 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 
 						// ..check if param (not param_adj!) is missing
 
-						if (ArgoFileValidator.is_FillValue(fValue, prm[n])) {
+						if (is_FillValue(fValue, prm[n])) {
 							// .....param is missing.....
 							// =======
 							// CK_0276
 							// =======
-							if (!ArgoFileValidator.is_FillValue(fValue, prm_adj[n])) {
+							if (!is_FillValue(fValue, prm_adj[n])) {
 								// ..param_adjusted is NOT missing - error
 								notMissAdj.increment(n);
 
@@ -2494,7 +2490,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 							// =======
 							// CK_0278
 							// =======
-							if (!ArgoFileValidator.is_FillValue(fValue, prm_adj_err[n])) {
+							if (!is_FillValue(fValue, prm_adj_err[n])) {
 								// ..param_adjusted_error is NOT missing - error
 								notMissErr.increment(n);
 							}
@@ -2509,7 +2505,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 						} else {
 							// .....param is NOT missing......
 
-							if (ArgoFileValidator.is_FillValue(fValue, prm_adj[n])) {
+							if (is_FillValue(fValue, prm_adj[n])) {
 								// =======
 								// CK_0279
 								// =======
@@ -2520,7 +2516,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 								// =======
 								// CK_0280
 								// =======
-								if (!ArgoFileValidator.is_FillValue(fValue, prm_adj_err[n])) {
+								if (!is_FillValue(fValue, prm_adj_err[n])) {
 									errNotMiss.increment(n);
 								}
 
@@ -2683,7 +2679,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 
 				if (f == Float.NaN) {
 					is_nan = true;
-				} else if (!ArgoFileValidator.is_FillValue(fillValue, f)) {
+				} else if (!is_FillValue(fillValue, f)) {
 					data = f;
 				}
 			}
@@ -2717,12 +2713,10 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 	 *
 	 *
 	 * @param nMeasure                N_MEASUREMENT value
-	 * @param CycNumIndex_cycle2index Cycle number-to-index mapping for N_CYCLE
-	 *                                variables
 	 * @throws IOException If an I/O error occurs
 	 */
 
-	public void validatePosition(int nMeasure) throws IOException {
+	private void validatePosition(int nMeasure) throws IOException {
 		log.debug(".....validatePosition: start.....");
 		log.debug("nMeasure = {}", nMeasure);
 
@@ -2751,7 +2745,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 
 		for (int n = 0; n < nMeasure; n++) {
 			if (pos_qc[n] != ' ') {
-				tableEntry = ArgoNVSReferenceTable.DM_QC_FLAG_TABLE.getConceptMembersByAltLabelMap()
+				tableEntry = argoNVSReferenceTable.getDM_QC_FLAG_TABLE().getConceptMembersByAltLabelMap()
 						.get(String.valueOf(pos_qc[n]));
 				// =======
 				// CK_0248
@@ -2786,7 +2780,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 				// =======
 				// CK_0250
 				// =======
-				tableEntry = ArgoNVSReferenceTable.POSITION_ACCURACY_TABLE.getConceptMembersByAltLabelMap()
+				tableEntry = argoNVSReferenceTable.getPOSITION_ACCURACY_TABLE().getConceptMembersByAltLabelMap()
 						.get(String.valueOf(pos_acc[n]));
 				if (tableEntry != null) {
 					// =======
@@ -2862,7 +2856,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 	 * @returns A list of the physical parameters in the file
 	 * @throws IOException If an I/O error occurs
 	 */
-	public ArrayList<String> validateTrajectoryParameters(int nParam) throws IOException {
+	private ArrayList<String> validateTrajectoryParameters(int nParam) throws IOException {
 		log.debug(".....validateTrajectoryParameters: start.....");
 
 		boolean embeddedEmpty = false;
@@ -3039,7 +3033,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 	 * maintain lists of indices for errors,
 	 *
 	 */
-	private class ErrorTracker {
+	private static class ErrorTracker {
 		// ..object variables
 		int counter;
 		int[] indices1, indices2;
@@ -3169,7 +3163,7 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 		}// ..end message()
 	}// ..end class ErrorTracker
 
-	private class ValidateNCycleJuld_check {
+	private static class ValidateNCycleJuld_check {
 		// ..instance variables
 		boolean[] checked;
 		ErrorTracker incJuld;
@@ -3212,5 +3206,15 @@ public class ArgoTrajectoryFileValidator extends ArgoFileValidator {
 			}
 		}
 	}
+
+  @Override
+  public boolean validateData(boolean singleCycle, String dacName, boolean ckNulls) throws IOException {
+    return validateData(true, dacName, ckNulls);
+  }
+
+  @Override
+  public boolean validateData(boolean ckNulls) throws IOException {
+    return validateData(true, null, ckNulls);
+  }
 
 } // ..end class

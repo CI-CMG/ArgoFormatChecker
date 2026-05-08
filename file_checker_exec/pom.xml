@@ -19,6 +19,22 @@
 	</properties>
 
 	<dependencies>
+    <dependency>
+      <groupId>io.github.ci-cmg.argo</groupId>
+      <artifactId>argo-file-check-xml</artifactId>
+      <version>1.0.2</version>
+    </dependency>
+    <dependency>
+      <groupId>com.sun.xml.bind</groupId>
+      <artifactId>jaxb-impl</artifactId>
+      <version>2.3.9</version>
+    </dependency>
+    <dependency>
+      <groupId>commons-io</groupId>
+      <artifactId>commons-io</artifactId>
+      <version>2.21.0</version>
+      <scope>test</scope>
+    </dependency>
 		<!--
 		https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-core -->
 		<dependency>
@@ -44,16 +60,15 @@
 		</dependency>
 
 		<dependency>
-			<groupId>edu.ucar</groupId>
-			<artifactId>netcdfAll</artifactId>
-			<version>4.3</version>
-			<exclusions>
-				<exclusion>
-					<groupId>java.xml</groupId>
-					<artifactId>java.xml</artifactId>
-				</exclusion>
-			</exclusions>
+      <groupId>edu.ucar</groupId>
+      <artifactId>cdm-core</artifactId>
+      <version>5.9.1</version>
 		</dependency>
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <version>33.5.0-jre</version>
+    </dependency>
 
 		<dependency>
 			<groupId>org.junit.jupiter</groupId>
@@ -122,10 +137,11 @@
 			<url>https://nexus.ifremer.fr/repository/maven-private-snapshot/</url>
 		</repository>
 		<!-- Repository where netcdfAll library is found -->
-		<repository>
-			<id>brockmann-repo</id>
-			<url>https://www.brockmann-consult.de/mvn/os/</url>
-		</repository>
+    <repository>
+      <id>unidata-all</id>
+      <name>Unidata All</name>
+      <url>https://artifacts.unidata.ucar.edu/repository/unidata-all/</url>
+    </repository>
 	</repositories>
 
 	<build>
@@ -161,6 +177,22 @@
 			</testResource>
 		</testResources>
 		<plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <version>3.5.0</version>
+        <executions>
+          <execution>
+            <id>library</id>
+            <goals>
+              <goal>jar</goal>
+            </goals>
+            <configuration>
+              <classifier>lib</classifier>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
 		<!-- delete resources/file_checker_spec folder before copying it from source folder -->
 			<plugin>
 			    <groupId>org.apache.maven.plugins</groupId>

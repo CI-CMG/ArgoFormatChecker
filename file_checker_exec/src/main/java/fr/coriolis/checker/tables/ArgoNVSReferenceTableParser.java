@@ -16,13 +16,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import ioinformarics.oss.jackson.module.jsonld.JsonldModule;
 
 public class ArgoNVSReferenceTableParser {
-	private final ObjectMapper objectMapper;
+	private final ObjectMapper objectMapper = initObjectMapper();
 
-	public ArgoNVSReferenceTableParser() {
-		this.objectMapper = initObjectMapper();
-	}
-
-	private ObjectMapper initObjectMapper() {
+	private static ObjectMapper initObjectMapper() {
 		final ObjectMapper objectMapper = new ObjectMapper();
 		// Ignore unknown properties in deserialization input
 		objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);

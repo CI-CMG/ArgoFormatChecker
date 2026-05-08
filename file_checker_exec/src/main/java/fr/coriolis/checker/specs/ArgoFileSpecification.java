@@ -6,9 +6,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -19,15 +21,14 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
 import fr.coriolis.checker.core.ArgoDataFile;
 import fr.coriolis.checker.exceptions.R03ParameterException;
 import fr.coriolis.checker.tables.ArgoNVSReferenceTable;
 import fr.coriolis.checker.tables.R03DeprecatedEntry;
 import fr.coriolis.checker.tables.SkosConcept;
 import fr.coriolis.checker.utils.NvsDefinitionParser;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import ucar.ma2.DataType;
 
 /**
@@ -35,7 +36,6 @@ import ucar.ma2.DataType;
  * 
  * <p>
  * This class does NOT implement the "format verification" process. See
- * {@link fr.coriolis.checker.core.ArgoDataFile#verifyFormat()
  * ArgoDataFile.verifyFormat} for more information.
  * <p>
  * <b>
@@ -475,18 +475,13 @@ public class ArgoFileSpecification {
 	// ..........Class variables..............
 	private static final String BLANK_MESSAGE = "";
 
-	public static char[] DATA_TYPE;
-	public static char[] FORMAT_VERSION;
-	public static char[] HANDBOOK_VERSION;
-	public static char[] REFERENCE_DATE_TIME;
-
 	private static String message = BLANK_MESSAGE;
 
 	// .......physical parameter variables...........
 
-	private static final HashMap<String, ArgoDataFile.FileType> paramFileTypes = new HashMap<String, ArgoDataFile.FileType>();
-	private static final Set<String> NUMERIC_ATTRS = new HashSet<>(
-			Arrays.asList("valid_min", "valid_max", "fillValue", "resolution"));
+	private static final Map<String, ArgoDataFile.FileType> paramFileTypes = createParamFileTypes();
+	private static final Set<String> NUMERIC_ATTRS = Collections.unmodifiableSet(new HashSet<>(
+			Arrays.asList("valid_min", "valid_max", "fillValue", "resolution")));
 	// ..attribute constants
 
 	/**
@@ -523,170 +518,133 @@ public class ArgoFileSpecification {
 
 	public static final int NUMBER_ALLOWED_DUPLICATE_SENSOR = 5;
 
-	private static final String axis = new String("axis");
-	private static final String c_format = new String("C_format");
-	private static final String comment = new String("comment");
-	private static final String comment_on_resolution = new String("comment_on_resolution");
-	private static final String conventions = new String("conventions");
-	private static final String fillValue = new String("_FillValue");
-	private static final String fillValueBLANK = new String(" ");
-	private static final String fortran_format = new String("FORTRAN_format");
-	private static final String long_name = new String("long_name");
-	private static final String standard_name = new String("standard_name");
-	private static final String units = new String("units");
-	private static final String valid_min = new String("valid_min");
-	private static final String valid_max = new String("valid_max");
-	private static final String resolution = new String("resolution");
+	private static final String axis = "axis";
+	private static final String c_format = "C_format";
+	private static final String comment = "comment";
+	private static final String comment_on_resolution = "comment_on_resolution";
+	private static final String conventions = "conventions";
+	private static final String fillValue = "_FillValue";
+	private static final String fillValueBLANK = " ";
+	private static final String fortran_format = "FORTRAN_format";
+	private static final String long_name = "long_name";
+	private static final String standard_name = "standard_name";
+	private static final String units = "units";
+	private static final String valid_min = "valid_min";
+	private static final String valid_max = "valid_max";
+	private static final String resolution = "resolution";
 
-	private static final String prmQcLName = new String("quality flag");
-	private static final String prmQcConventions = new String("Argo reference table 2");
+	private static final String prmQcLName = "quality flag";
+	private static final String prmQcConventions = "Argo reference table 2";
 
-	private static final String prfQcLName = new String("Global quality flag of ");
-	private static final String prfQcConventions = new String("Argo reference table 2a");
+	private static final String prfQcLName = "Global quality flag of ";
+	private static final String prfQcConventions = "Argo reference table 2a";
 
 	public static class AttrRegex {
 		public Pattern pattern;
 		public boolean warn;
 	}
 
-	private static final HashMap<String, String> NC_FILL_TYPES = new HashMap<String, String>();
+	private static final Map<String, String> NC_FILL_TYPES = createNC_FILL_TYPES();
 
 	// ......define and initialize the pattern matcher objects......
-	static Pattern pActive; // ..status: active
-	static Pattern pAttrRegex; // ..attribute regex
-	static Pattern pBlankOrComment; // ..match a blank line or a comment line
-	static Pattern pComment; // ..comment
-	static Pattern pCloseTag; // ..CDL closing bracket
-	static Pattern pDataTag; // ..CDL "data:" tag
-	static Pattern pDeprecated; // ..status: deprecated
-	static Pattern pDeleted; // ..status: deleted
-	static Pattern pDimDef;
-	static Pattern pDimPattern;
-	static Pattern pDimTag; // ..CDL "data:" tag
-	static Pattern pGlblAttr; // ..CDL global attribute
-	static Pattern pN_VALUES; // ..comment indicates extra dimension
-	static Pattern pOpenTag; // ..CDL "netcdf <name> {" tag
-	static Pattern pOptVar; // ..OPT definition
-	static Pattern pParam; // ..Param file
-	static Pattern pRefused; // ..status: refused
-	static Pattern pUnderway; // ..status: pulication/creation underway
-	static Pattern pVarAttr; // ..CDL variable attribute
-	static Pattern pVarDef; // ..CDL variable definition
-	static Pattern pVarDim; // ..CDL variable dimesions
-	static Pattern pVarTag; // ..CDL "variables:" tag
-	static Pattern pPRESn; // ..Param name PRES[0-9]?
-	static Pattern pParamEndInDigit; // ..Param name ending in a digit
+
+  // ..match an attribute regex line
+  // ..group 1: variable:attribute; group 2: variable; group 3: attr; group 4:
+	private static final Pattern pAttrRegex = Pattern.compile("^\\s*((\\w*|\\*):(\\w+))\\s*=\\s*(.*);\\s*(WARN|NOWARN)?\\s*");
+  // ..match a blank line (or a line with just comments)
+	private static final Pattern pBlankOrComment = Pattern.compile("^\\s*(?://.*)*");
+  // ..match a comment (any where on the line) - recognize the "//@" comments
+  // ..group 1: the word following "@"; group 2: the setting
+	private static final Pattern pComment = Pattern.compile("//(?:@\\s*(\\w+)\\s*=\\s*\"(.+)\")?.*$");
+  // ..match the line "}" that starts the data section of a CDL file
+	private static final Pattern pCloseTag = Pattern.compile("^\\s*}\\s*(?://.*)*$");
+  // ..match the line "data:" that starts the data section of a CDL file
+	private static final Pattern pDataTag = Pattern.compile("^\\s*data:\\s*$");
+  // ..match a dimension specification. 2 options:
+  // ..1) NAME = #### (#=digit)
+  // .. group 1: name; group 2: ####; group 3: ####; group 4 = null
+  // ..2) NAME = word (ie, UNLIMITED, _unspecified_, etc)
+  // .. group 1: name; group 2: word; group 3: null; group 4 = word
+	private static final Pattern pDimDef = Pattern.compile("^\\s*(\\w+)\\s*=\\s*((\\d+)|(\\w+));.*");
+  // ..match a "pattern" dimension specification.
+  // .. NAME = _extra_
+  // .. group 1: name-regex
+	private static final Pattern pDimPattern = Pattern.compile("^\\s*([\\S]+)\\s*=\\s*_extra_\\s*;.*");
+  // ..match the line "dimensions:" that starts the dimension section of CDL
+	private static final Pattern pDimTag = Pattern.compile("^\\s*dimensions:\\s*$");
+  // ..match a global attribute definition line
+  // ..group 1: attribute name; group 2/3: string/number definition
+	private static final Pattern pGlblAttr = Pattern.compile("^\\s*:(\\w+)\\s*=\\s*(?:\"(.*)\"\\s*|(.*));\\s*(?:/\\*\\s*REGEX\\s*=\\s*\"(.*)\"\\s*\\*/)*\\s*");
+  // ..match the param-file comment with N_VALUESxx (extra dimension)
+	private static final Pattern pN_VALUES = Pattern.compile(".*N_VALUES.*");
+  // ..match the "netcdf (<name>) {" line that starts the CDL
+  // ..group 1: name
+	private static final Pattern pOpenTag = Pattern.compile("^netcdf\\s+(\\S+)\\s+\\{\\s*");
+  // ..match an "optional variable" definition
+  // ..group 1: variable name; group 2: related variable
+  // pOptVar = Pattern.compile("^\\s*(\\w+)\\s*(?::\\s*(\\w+))?");
+	private static final Pattern pOptVar = Pattern.compile("^\\s*(\\w+)\\s*(?::\\s*(\\w+))?.*");
+  // ..match the first field in the parameter file
+  // ..group 1: parameter name
+	private static final Pattern pParam = Pattern.compile("^\\s*(\\w+)\\s*(?::\\s*(\\w+))?.*");
+  // ..match a variable attribute definition line
+  // ..group 1: variable name; group 2: attribute name; group 3/4: string/number
+  // definition
+	private static final Pattern pVarAttr = Pattern.compile("^\\s*(\\w+):(\\w+)\\s*=\\s*(?:\"(.*)\"\\s*|(.*));\\s*");
+  // ..match a variable definition line
+  // ..group 1: type; group 2: name; group 3: dimensions
+	private static final Pattern pVarDef = Pattern.compile("^\\s*(\\w+)\\s+(\\w+)\\s*(\\(.*\\))?;\\s*");
+  // ..match the dimensions of a variable definition
+  // ..group 1: alternate-dimension definition ( alt1|alt2|alt3 )
+  // ..group 2: a regular dimension definition
+	private static final Pattern pVarDim = Pattern.compile("((?:\\w+\\|)+\\w+)|(\\w+)");
+  // ..match the line "variables:" that starts the dimension section of CDL
+	private static final Pattern pVarTag = Pattern.compile("^\\s*variables:\\s*$");
+  // ..match the PRES and PRESn variable names
+	private static final Pattern pPRESn = Pattern.compile("^PRES\\d?");
+  // ..match a param name ending in a digit
+	private static final Pattern pParamEndInDigit = Pattern.compile(".*\\d$");
+
+  // ..match the "status" codes (proposed)
+  private static final Pattern pActive = Pattern.compile("(?i)(active|approved).*");
+  private static final Pattern pDeprecated = Pattern.compile("(?i)deprecated.*");
+  private static final Pattern pDeleted = Pattern.compile("(?i)(deleted|obsolete).*");
+  private static final Pattern pRefused = Pattern.compile("(?i)refused.*");
+  private static final Pattern pUnderway = Pattern.compile("(?i)(publication|creation) +underway.*");
 
 	// ..logger
-	private static final Logger log = LogManager.getLogger("ArgoFileSpecification");
+	private static final Logger log = LoggerFactory.getLogger("ArgoFileSpecification");
 
 	// .............initializers............
 
-	static {
-		// ..match an attribute regex line
-		// ..group 1: variable:attribute; group 2: variable; group 3: attr; group 4:
-		// regex
-		pAttrRegex = Pattern.compile("^\\s*((\\w*|\\*):(\\w+))\\s*=\\s*(.*);\\s*(WARN|NOWARN)?\\s*");
+  private static Map<String, String> createNC_FILL_TYPES() {
+    Map<String, String> map = new HashMap<>();
+    // ..build type-map for nc_fill_values
+    map.put("NC_FILL_CHAR", "0");
+    // NC_FILL_TYPES.put("NC_FILL_DOUBLE",
+    // ucar.nc2.iosp.netcdf3.N3iosp.NC_FILL_DOUBLE.toString());
+    map.put("NC_FILL_DOUBLE", "9.969209968386869E36");
+    map.put("NC_FILL_FLOAT", "9.969209968386869E36f");
+    map.put("NC_FILL_INT", "-2147483647");
+    map.put("NC_FILL_LONG", "-9223372036854775806L");
+    map.put("NC_FILL_SHORT", "-32767");
+    return Collections.unmodifiableMap(map);
+  }
 
-		// ..match a blank line (or a line with just comments)
-		pBlankOrComment = Pattern.compile("^\\s*(?://.*)*");
+  private static Map<String, ArgoDataFile.FileType> createParamFileTypes() {
+    Map<String, ArgoDataFile.FileType> map = new HashMap<>();
+    // ..build type-map for param variables
+    map.put("prof", ArgoDataFile.FileType.PROFILE);
+    map.put("traj", ArgoDataFile.FileType.TRAJECTORY);
+    map.put("b-prof", ArgoDataFile.FileType.BIO_PROFILE);
+    map.put("b-traj", ArgoDataFile.FileType.BIO_TRAJECTORY);
+    return Collections.unmodifiableMap(map);
+  }
 
-		// ..match a comment (any where on the line) - recognize the "//@" comments
-		// ..group 1: the word following "@"; group 2: the setting
-		pComment = Pattern.compile("//(?:@\\s*(\\w+)\\s*=\\s*\"(.+)\")?.*$");
-
-		// ..match the line "}" that starts the data section of a CDL file
-		pCloseTag = Pattern.compile("^\\s*}\\s*(?://.*)*$");
-
-		// ..match the line "data:" that starts the data section of a CDL file
-		pDataTag = Pattern.compile("^\\s*data:\\s*$");
-
-		// ..match a dimension specification. 2 options:
-		// ..1) NAME = #### (#=digit)
-		// .. group 1: name; group 2: ####; group 3: ####; group 4 = null
-		// ..2) NAME = word (ie, UNLIMITED, _unspecified_, etc)
-		// .. group 1: name; group 2: word; group 3: null; group 4 = word
-		pDimDef = Pattern.compile("^\\s*(\\w+)\\s*=\\s*((\\d+)|(\\w+));.*");
-
-		// ..match a "pattern" dimension specification.
-		// .. NAME = _extra_
-		// .. group 1: name-regex
-		pDimPattern = Pattern.compile("^\\s*([\\S]+)\\s*=\\s*_extra_\\s*;.*");
-
-		// ..match the line "dimensions:" that starts the dimension section of CDL
-		pDimTag = Pattern.compile("^\\s*dimensions:\\s*$");
-
-		// ..match a global attribute definition line
-		// ..group 1: attribute name; group 2/3: string/number definition
-		pGlblAttr = Pattern.compile(
-				"^\\s*:(\\w+)\\s*=\\s*(?:\"(.*)\"\\s*|(.*));\\s*(?:/\\*\\s*REGEX\\s*=\\s*\"(.*)\"\\s*\\*/)*\\s*");
-
-		// ..match the param-file comment with N_VALUESxx (extra dimension)
-		pN_VALUES = Pattern.compile(".*N_VALUES.*");
-
-		// ..match the "netcdf (<name>) {" line that starts the CDL
-		// ..group 1: name
-		pOpenTag = Pattern.compile("^netcdf\\s+(\\S+)\\s+\\{\\s*");
-
-		// ..match an "optional variable" definition
-		// ..group 1: variable name; group 2: related variable
-		// pOptVar = Pattern.compile("^\\s*(\\w+)\\s*(?::\\s*(\\w+))?");
-		pOptVar = Pattern.compile("^\\s*(\\w+)\\s*(?::\\s*(\\w+))?.*");
-
-		// ..match the first field in the parameter file
-		// ..group 1: parameter name
-		pParam = Pattern.compile("^\\s*(\\w+)\\s*(?::\\s*(\\w+))?.*");
-
-		// ..match a variable attribute definition line
-		// ..group 1: variable name; group 2: attribute name; group 3/4: string/number
-		// definition
-		pVarAttr = Pattern.compile("^\\s*(\\w+):(\\w+)\\s*=\\s*(?:\"(.*)\"\\s*|(.*));\\s*");
-
-		// ..match a variable definition line
-		// ..group 1: type; group 2: name; group 3: dimensions
-		pVarDef = Pattern.compile("^\\s*(\\w+)\\s+(\\w+)\\s*(\\(.*\\))?;\\s*");
-
-		// ..match the dimensions of a variable definition
-		// ..group 1: alternate-dimension definition ( alt1|alt2|alt3 )
-		// ..group 2: a regular dimension definition
-		pVarDim = Pattern.compile("((?:\\w+\\|)+\\w+)|(\\w+)");
-
-		// ..match the line "variables:" that starts the dimension section of CDL
-		pVarTag = Pattern.compile("^\\s*variables:\\s*$");
-
-		// ..match the PRES and PRESn variable names
-		pPRESn = Pattern.compile("^PRES\\d?");
-
-		// ..match a param name ending in a digit
-		pParamEndInDigit = Pattern.compile(".*\\d$");
-
-		// ..match the "status" codes (proposed)
-		pActive = Pattern.compile("(?i)(active|approved).*");
-		pDeprecated = Pattern.compile("(?i)deprecated.*");
-		pDeleted = Pattern.compile("(?i)(deleted|obsolete).*");
-		pRefused = Pattern.compile("(?i)refused.*");
-		pUnderway = Pattern.compile("(?i)(publication|creation) +underway.*");
-
-		// ..build type-map for param variables
-		paramFileTypes.put("prof", ArgoDataFile.FileType.PROFILE);
-		paramFileTypes.put("traj", ArgoDataFile.FileType.TRAJECTORY);
-		paramFileTypes.put("b-prof", ArgoDataFile.FileType.BIO_PROFILE);
-		paramFileTypes.put("b-traj", ArgoDataFile.FileType.BIO_TRAJECTORY);
-
-		// ..build type-map for nc_fill_values
-		NC_FILL_TYPES.put("NC_FILL_CHAR", "0");
-		// NC_FILL_TYPES.put("NC_FILL_DOUBLE",
-		// ucar.nc2.iosp.netcdf3.N3iosp.NC_FILL_DOUBLE.toString());
-		NC_FILL_TYPES.put("NC_FILL_DOUBLE", "9.969209968386869E36");
-		NC_FILL_TYPES.put("NC_FILL_FLOAT", "9.969209968386869E36f");
-		NC_FILL_TYPES.put("NC_FILL_INT", "-2147483647");
-		NC_FILL_TYPES.put("NC_FILL_LONG", "-9223372036854775806L");
-		NC_FILL_TYPES.put("NC_FILL_SHORT", "-32767");
-
-	}
 
 	// .....object variables......
-	public ArgoConfigTechParam ConfigTech;
+  private final ArgoNVSReferenceTable argoNVSReferenceTable;
+  private ArgoConfigTechParam ConfigTech;
 
 	private String cdlFileName;
 	private String optFileName;
@@ -725,13 +683,16 @@ public class ArgoFileSpecification {
 	 * the specification files in the specfication directory
 	 *
 	 * @param fullSpec false = open template spec; true = open full spec
-	 * @param specDir  the string directory name for the specification files
 	 * @param fType    the filetype of the Argo file (static enum in ArgoDataFile)
 	 * @param version  the string version of the format
 	 * @throws IOException for I/O errors
 	 */
-	public ArgoFileSpecification(boolean fullSpec, ArgoDataFile.FileType fType, String version) throws IOException {
-		openSpecification(fullSpec, fType, version);
+	public ArgoFileSpecification(ArgoNVSReferenceTable argoNVSReferenceTable, boolean fullSpec, ArgoDataFile.FileType fType, String version,
+      boolean useInternalSpecs, Path specDir) throws IOException {
+    this.argoNVSReferenceTable = argoNVSReferenceTable;
+    this.useInternalSpecs = useInternalSpecs;
+    this.specDir = specDir;
+    openSpecification(fullSpec, fType, version);
 	} // ..end constructor
 
 	// ............................................
@@ -748,7 +709,11 @@ public class ArgoFileSpecification {
 		return dimHash.get(name);
 	}
 
-	/**
+  public ArgoConfigTechParam getConfigTech() {
+    return ConfigTech;
+  }
+
+  /**
 	 * Adds an "extra dimension" to the specification. These are dimensions added to
 	 * allow for an extra data dimension in the physical parameters.
 	 *
@@ -903,7 +868,7 @@ public class ArgoFileSpecification {
 	 * @return The string message.
 	 */
 	public String getMessage() {
-		return new String(message);
+		return message;
 	}
 
 	/**
@@ -912,7 +877,7 @@ public class ArgoFileSpecification {
 	 * @return The string spec name.
 	 */
 	public String getSpecName() {
-		return new String(specName);
+		return specName;
 	}
 
 	/**
@@ -976,7 +941,7 @@ public class ArgoFileSpecification {
 		if (s == null) {
 			return null;
 		}
-		return new String(s);
+		return s;
 	}
 
 	/**
@@ -1020,6 +985,9 @@ public class ArgoFileSpecification {
 		return p;
 	}
 
+  private final boolean useInternalSpecs;
+  private final Path specDir;
+
 	// ............................................
 	// METHODS
 	// ............................................
@@ -1030,7 +998,6 @@ public class ArgoFileSpecification {
 	 * This includes all of the elements defined
 	 * 
 	 * @param fullSpec false = open template spec; true = open full spec
-	 * @param specDir  the string name of the directory containing the spec files
 	 * @param fType    the file type
 	 * @param version  the string specification version
 	 */
@@ -1117,7 +1084,7 @@ public class ArgoFileSpecification {
 
 		if (fullSpec) {
 			// ..initialize the reference tables..
-			ArgoReferenceTable ref = new ArgoReferenceTable();
+			ArgoReferenceTable ref = new ArgoReferenceTable(useInternalSpecs, specDir);
 
 			// ..attribute regex file -- optional
 			status = parseAttrRegexFile();
@@ -1127,12 +1094,12 @@ public class ArgoFileSpecification {
 
 			// ..meta-data configuration parameter file
 			if (fType == ArgoDataFile.FileType.METADATA && version.startsWith("3")) {
-				ConfigTech = new ArgoConfigTechParam(version, true, false);
+				ConfigTech = new ArgoConfigTechParam(version, true, false, argoNVSReferenceTable, useInternalSpecs, specDir);
 			}
 
 			// ..technical parameter file
 			if (fType == ArgoDataFile.FileType.TECHNICAL) {
-				ConfigTech = new ArgoConfigTechParam(version, false, true);
+				ConfigTech = new ArgoConfigTechParam(version, false, true, argoNVSReferenceTable, useInternalSpecs, specDir);
 
 				// ..for each <tech_param> entry, automatically make <tech_param>* variables
 				// too. version >= 3.1 only
@@ -1298,7 +1265,7 @@ public class ArgoFileSpecification {
 
 		log.debug(".....parseCdlFile: start.....");
 		// ..open the CDL specification file
-		try (InputStream in = SpecIO.getInstance().open(cdlFileName);
+		try (InputStream in = SpecIO.open(useInternalSpecs, specDir, cdlFileName);
 				BufferedReader fileReader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));) {
 
 			log.info("parsing spec CDL file '" + cdlFileName + "'");
@@ -1710,7 +1677,7 @@ public class ArgoFileSpecification {
 
 		log.debug(".....parseOptFile: start.....");
 
-		try (InputStream in = SpecIO.getInstance().open(optFileName);
+		try (InputStream in = SpecIO.open(useInternalSpecs, specDir, optFileName);
 				BufferedReader fileReader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));) {
 
 			// ..file exists and it can be read
@@ -1822,7 +1789,7 @@ public class ArgoFileSpecification {
 
 		log.debug(".....parseAttrRegexFile: start.....");
 
-		try (InputStream in = SpecIO.getInstance().open(regFileName);
+		try (InputStream in = SpecIO.open(useInternalSpecs, specDir, regFileName);
 				BufferedReader fileReader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));) {
 
 			// ..file exists and it can be read
@@ -2050,7 +2017,7 @@ public class ArgoFileSpecification {
 		// ===========
 		// CK_0072 2/2
 		// ===========
-		for (SkosConcept physParamEntry : ArgoNVSReferenceTable.PARAMETER_TABLE.getConceptMembersByAltLabelMap()
+		for (SkosConcept physParamEntry : argoNVSReferenceTable.getPARAMETER_TABLE().getConceptMembersByAltLabelMap()
 				.values()) {
 
 			try {
@@ -2165,7 +2132,7 @@ public class ArgoFileSpecification {
 	 * table and if no entries detected for the considered parameter and format
 	 * version, check the reference R03 NVS table.
 	 * 
-	 * @param string a properties name (data_type, category, extra_dim=
+	 * @param paramName a properties name (data_type, category, extra_dim=
 	 * @return
 	 */
 	private String getPropertyValueFromSpec(String paramName, Map<String, String> physParamProperties,
@@ -2247,7 +2214,7 @@ public class ArgoFileSpecification {
 		AuxilliarySettings auxilliarySettings = new AuxilliarySettings();
 
 		// ..open the file
-		try (InputStream in = SpecIO.getInstance().open(prmFileNameAux);
+		try (InputStream in = SpecIO.open(useInternalSpecs, specDir, prmFileNameAux);
 				BufferedReader fileReader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));) {
 
 			// ..parse the file
@@ -2318,7 +2285,7 @@ public class ArgoFileSpecification {
 	 * valid in a previous version but is no longer accepted in the current
 	 * reference version but should only raise a warning and not an error.
 	 *
-	 * @param path    path to the deprecated table file
+	 *
 	 * @param version version filter, e.g. {@code "[3.0]"}
 	 * @return list of deprecated entries for the given version, empty if none match
 	 * @throws IOException if the file cannot be read
@@ -2326,7 +2293,7 @@ public class ArgoFileSpecification {
 	private void parseR03DeprecatedTable(String version) throws IOException {
 		List<R03DeprecatedEntry> entries = new ArrayList<>();
 
-		try (InputStream in = SpecIO.getInstance().open(r03DepPhysicalParamsTableName);
+		try (InputStream in = SpecIO.open(useInternalSpecs, specDir, r03DepPhysicalParamsTableName);
 				BufferedReader br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));) {
 
 			String line;
@@ -2652,7 +2619,7 @@ public class ArgoFileSpecification {
 	private void buildStatAdjustedErrorVariable(ArgoDimension[] dimParam, String errComment, String errLongName,
 			String prmLName, String prmUnits, String prmFill, DataType ncDataType, String statNm, String stat_adj) {
 
-		String varNm = new String(statNm + "_ADJUSTED_ERROR");
+		String varNm = statNm + "_ADJUSTED_ERROR";
 
 		String longName = (errLongName == null ? prmLName : errLongName);
 
@@ -2761,7 +2728,7 @@ public class ArgoFileSpecification {
 		 * where <S> = <STAT>, <STAT>_ADJUSTED
 		 */
 
-		String varNm = new String(v + "_QC");
+		String varNm = v + "_QC";
 		aVar = createPhysParamArgoVariable(statNm, dimParam, varNm, DataType.CHAR, prmQcLName, fillValueBLANK,
 				prmQcConventions, "", "", "", "", "", "", "", "");
 
@@ -2792,7 +2759,7 @@ public class ArgoFileSpecification {
 	 * @param stat_qc
 	 */
 	private void buidProfileStatQcVariable(ArgoDimension[] dimPQc, String statNm, String stat_qc) {
-		String varNm = new String("PROFILE_" + statNm + "_QC");
+		String varNm = "PROFILE_" + statNm + "_QC";
 
 		ArgoVariable aVar = createPhysParamArgoVariable(statNm, dimPQc, varNm, DataType.CHAR,
 				prfQcLName + statNm + " profile", fillValueBLANK, prfQcConventions, "", "", "", "", "", "", "", "");
@@ -2839,7 +2806,7 @@ public class ArgoFileSpecification {
 			boolean CORE, boolean BIO, String group_adj) {
 		String varNm;
 		ArgoVariable aVar;
-		varNm = new String(prmName + "_ADJUSTED_ERROR");
+		varNm = prmName + "_ADJUSTED_ERROR";
 		// aVar = new ArgoVariable(varNm, ncDataType, dimParam, prmName);
 		aVar = createPhysParamArgoVariable(prmName, dimParam, varNm, ncDataType,
 				(errLongName == null ? prmLName : errLongName), prmFill, "", prmUnits, "", "", ATTR_IGNORE + prmFill,
@@ -3052,7 +3019,7 @@ public class ArgoFileSpecification {
 
 			if (!bio_pres) {
 				// build the *<PARAM>_QC and <PARAM>_ADJUSTED_QC variables
-				varNm = new String(v + "_QC");
+				varNm = v + "_QC";
 				aVar = createPhysParamArgoVariable(prmName, dimParam, varNm, DataType.CHAR, prmQcLName, fillValueBLANK,
 						prmQcConventions, "", "", "", "", "", "", "", "");
 //				aVar = new ArgoVariable(varNm, DataType.CHAR, dimParam, prmName);
@@ -3124,7 +3091,7 @@ public class ArgoFileSpecification {
 		String varNm;
 		ArgoVariable aVar;
 		if (!bio_pres) {
-			varNm = new String("PROFILE_" + prmName + "_QC");
+			varNm = "PROFILE_" + prmName + "_QC";
 			aVar = createPhysParamArgoVariable(prmName, dimPQc, varNm, DataType.CHAR, prfQcLName + prmName + " profile",
 					fillValueBLANK, prfQcConventions, "", "", "", "", "", "", "", "");
 
@@ -3397,7 +3364,7 @@ public class ArgoFileSpecification {
 	 * provide a map with key="extra_dim" and value="name1, name2". This function is
 	 * needed to extract name1, name2, etc. and provide a list of string
 	 * 
-	 * @param stringList (String). ex : "name1, name2"
+	 * @param content (String). ex : "name1, name2"
 	 * @return list of extra dimensions. ex : {"name1","name2"}
 	 */
 	private static String[] getValuesListFromParameterListAttribute(String content) {
@@ -3501,7 +3468,7 @@ public class ArgoFileSpecification {
 	 * 
 	 * @param var      Variable to add attribute to
 	 * @param attrName Attribute name
-	 * @param attVal   Attribute value -- can be the attribute "special codes" Input
+	 * @param attrVal   Attribute value -- can be the attribute "special codes" Input
 	 *                 as a string then converted to the appropriate type
 	 * @param type     String representing the data type
 	 */

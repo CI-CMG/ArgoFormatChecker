@@ -35,4 +35,9 @@ public final class NetUtils {
 		return conn.getInputStream();
 	}
 
+  // prevent static utility class instantiation
+  private NetUtils() {
+
+  }
+
 }

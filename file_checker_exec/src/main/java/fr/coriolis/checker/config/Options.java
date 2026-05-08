@@ -5,8 +5,8 @@ import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import fr.coriolis.checker.specs.ArgoReferenceTable;
 
@@ -77,7 +77,7 @@ public class Options {
 	// ..standard i/o shortcuts
 	static PrintStream stdout = new PrintStream(System.out);
 	static PrintStream stderr = new PrintStream(System.err);
-	private static final Logger log = LogManager.getLogger("Options");
+	private static final Logger log = LoggerFactory.getLogger("Options");
 
 	// ====== CONSTRUCTOR ======
 	private Options(boolean doNameCheck, boolean doNulls, boolean doFormatOnly, boolean doFormatOnlyPre31,

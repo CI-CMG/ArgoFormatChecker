@@ -1,14 +1,10 @@
 package fr.coriolis.checker.validators;
 
 import java.io.IOException;
-import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import fr.coriolis.checker.core.ArgoDataFile;
 import fr.coriolis.checker.core.ArgoDataFile.FileType;
@@ -16,6 +12,8 @@ import fr.coriolis.checker.specs.ArgoDate;
 import fr.coriolis.checker.specs.ArgoReferenceTable;
 import fr.coriolis.checker.tables.ArgoNVSReferenceTable;
 import fr.coriolis.checker.tables.SkosConcept;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import ucar.ma2.Array;
 import ucar.ma2.ArrayChar;
 import ucar.ma2.DataType;
@@ -41,17 +39,14 @@ import ucar.nc2.Variable;
  *          $
  * @version $Id: ArgoProfileFile.java 1269 2021-06-14 20:34:45Z ignaszewski $
  */
-public class ArgoProfileFileValidator extends ArgoFileValidator {
+public class ArgoProfileFileValidator extends BaseArgoFileValidator {
 
 	// .........................................
 	// VARIABLES
 	// .........................................
 
 	// ..class variables
-	// ..standard i/o shortcuts
-	private static PrintStream stdout = new PrintStream(System.out);
-	private static PrintStream stderr = new PrintStream(System.err);
-	private static final Logger log = LogManager.getLogger("ArgoProfileFile");
+	private static final Logger log = LoggerFactory.getLogger("ArgoProfileFile");
 
 	private final static String goodJuldQC = new String("01258");
 
@@ -61,8 +56,8 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 	// CONSTRUCTORS
 	// .......................................
 
-	public ArgoProfileFileValidator(ArgoDataFile arFile) throws IOException {
-		super(arFile);
+	public ArgoProfileFileValidator(ArgoDataFile arFile, ArgoNVSReferenceTable argoNVSReferenceTable) {
+		super(arFile, argoNVSReferenceTable);
 	}
 
 //	protected ArgoProfileFileValidator(String specDir, String version) {
@@ -139,8 +134,9 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 	 *         reason).
 	 * @throws IOException If an I/O error occurs
 	 */
+  @Override
 	public boolean validateData(boolean singleCycle, String dacName, boolean ckNulls) throws IOException {
-		boolean basicsChecks = super.basicDataValidation(ckNulls);
+		boolean basicsChecks = basicDataValidation(ckNulls);
 		if (!basicsChecks) {
 			return false;
 		}
@@ -172,7 +168,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 		return true;
 	}// ..end validate
 
-	/**
+  /**
 	 * Validates the dates in the profile file.
 	 * 
 	 * Date Checks
@@ -195,7 +191,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 	 * @param nHistory the number of history records in the file
 	 * @throws IOException If an I/O error occurs
 	 */
-	public void validateDates(int nProf, int nParam, int nCalib, int nHistory) throws IOException {
+	private void validateDates(int nProf, int nParam, int nCalib, int nHistory) throws IOException {
 		log.debug(".....validateDates: start.....");
 
 		// ..check Reference_Date
@@ -230,7 +226,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 		}
 
 		// ...........initial creation & update dates checks:.............
-		super.validateCreationUpdateDates(fileTime);
+		validateCreationUpdateDates(fileTime);
 
 		// ............check per-profile dates.............
 		// String posQC = readString("POSITION_QC");
@@ -434,7 +430,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 	 * @param nHist  the number of history records in the file
 	 * @throws IOException If an I/O error occurs
 	 */
-	public void validateDMode(int nProf, int nParam, int nCalib, int nHist) throws IOException {
+	private void validateDMode(int nProf, int nParam, int nCalib, int nHist) throws IOException {
 		log.debug(".....validateDMode: start.....");
 
 		String dMode = arFile.readString("DATA_MODE", true); // ..true -> return NULLs if present
@@ -622,7 +618,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 	 * @param nProf the number of profiles in the file
 	 * @throws IOException If an I/O error occurs
 	 */
-	public void validateHighlyDesirable(int nProf) throws IOException {
+	private void validateHighlyDesirable(int nProf) throws IOException {
 		log.debug(".....validateHighlyDesirable: start.....");
 		// get NVS tables :
 
@@ -652,7 +648,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 			for (int n = 0; n < nProf; n++) {
 				log.debug("POSITIONING_SYSTEM[" + n + "]: '" + str[n] + "'");
 
-				tableEntry = ArgoNVSReferenceTable.POSITIONING_SYSTEM_TABLE.getConceptMembersByAltLabelMap()
+				tableEntry = argoNVSReferenceTable.getPOSITIONING_SYSTEM_TABLE().getConceptMembersByAltLabelMap()
 						.get(str[n].trim());
 				if (tableEntry == null) {
 					validationResult.addWarning("POSITIONING_SYSTEM[" + (n + 1) + "]: '" + str[n] + "' Status: "
@@ -689,7 +685,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 	 *                    multi-cycle files validated.
 	 * @throws IOException If an I/O error occurs
 	 */
-	public boolean validateMetaData(int nProf, ArgoReferenceTable.DACS dac, boolean singleCycle) throws IOException {
+	private boolean validateMetaData(int nProf, ArgoReferenceTable.DACS dac, boolean singleCycle) throws IOException {
 		log.debug(".....validateMetaData: start.....");
 
 		String[] plNum = arFile.readStringArr("PLATFORM_NUMBER");
@@ -714,7 +710,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 			log.debug("PLATFORM_NUMBER[{}]: '{}'", n, plNum[n]);
 
 			String s = plNum[n].trim();
-			if (!super.validatePlatfomNumber(s)) {
+			if (!validatePlatfomNumber(s)) {
 				validationResult.addError("PLATFORM_NUMBER[" + (n + 1) + "]: '" + s + "': Invalid");
 			}
 			// =======
@@ -755,7 +751,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 			log.debug("DATA_STATE_INDICATOR[{}]: '{}'", n, ds[n]);
 
 			s = ds[n].trim();
-			tableEntry = ArgoNVSReferenceTable.DATA_STATE_INDICATOR_TABLE.getConceptMembersByAltLabelMap().get(s);
+			tableEntry = argoNVSReferenceTable.getDATA_STATE_INDICATOR_TABLE().getConceptMembersByAltLabelMap().get(s);
 			if (s.length() == 0) {
 				// =======
 				// CK_0043
@@ -770,7 +766,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 				float[] pres = arFile.readFloatArr("PRES", n);
 				if (pres != null) {
 					for (float d : pres) {
-						if (!ArgoFileValidator.is_99_999_FillValue(d)) {
+						if (!is_99_999_FillValue(d)) {
 							has_data = true;
 							break;
 						}
@@ -825,7 +821,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 					// CK_0089 & CK_0090 & CK_0091
 					// ===========================
 					int N = Integer.valueOf(s);
-					tableEntry = ArgoNVSReferenceTable.ARGO_WMO_INST_TYPE_TABLE.getConceptMembersByAltLabelMap().get(s);
+					tableEntry = argoNVSReferenceTable.getARGO_WMO_INST_TYPE_TABLE().getConceptMembersByAltLabelMap().get(s);
 					if (tableEntry != null) {
 						if (tableEntry.isDeprecated()) {
 							validationResult.addWarning("WMO_INST_TYPE[" + (n + 1) + "]: '" + s + "' Status: "
@@ -859,7 +855,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 					float[] pres = arFile.readFloatArr("PRES", n);
 					if (pres != null) {
 						for (float d : pres) {
-							if (!ArgoFileValidator.is_99_999_FillValue(d)) {
+							if (!is_99_999_FillValue(d)) {
 								has_data = true;
 								break;
 							}
@@ -882,7 +878,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 				// need to delete optionnal free text ([free text]) :
 				s = s.replaceAll("\\s*\\[.*\\]\\s*", "").trim();
 
-				tableEntry = ArgoNVSReferenceTable.VERTICAL_SAMPLING_SCHEME_TABLE.getConceptMembersByPrefLabelMap()
+				tableEntry = argoNVSReferenceTable.getVERTICAL_SAMPLING_SCHEME_TABLE().getConceptMembersByPrefLabelMap()
 						.get(s);
 				// =======
 				// CK_0176
@@ -980,7 +976,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 	 * @param nLevel number of levels in the file
 	 * @throws IOException If an I/O error occurs
 	 */
-	public void validateParams(int nProf, int nParam, int nLevel) throws IOException {
+	private void validateParams(int nProf, int nParam, int nLevel) throws IOException {
 		log.debug(".....validateParams: start.....");
 
 		ArrayList<String> allowedParam = arFile.getFileSpec().getPhysicalParamNames(); // ..allowed <param>
@@ -1292,8 +1288,8 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 							array = var.read(origin, shape);
 
 						} catch (Exception e) {
-							stderr.println(e.getMessage());
-							e.printStackTrace(stderr);
+							System.err.println(e.getMessage());
+							e.printStackTrace(System.err);
 							throw new IOException("Unable to read '" + p + "'");
 						}
 
@@ -1318,7 +1314,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 							double fVal = fillValue.doubleValue();
 
 							for (double d : data) {
-								if (!ArgoFileValidator.is_FillValue(fVal, d)) {
+								if (!is_FillValue(fVal, d)) {
 									hasData = true;
 									break;
 								}
@@ -1329,7 +1325,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 							float fVal = fillValue.floatValue();
 
 							for (float d : data) {
-								if (!ArgoFileValidator.is_FillValue(fVal, d)) {
+								if (!is_FillValue(fVal, d)) {
 									hasData = true;
 									break;
 								}
@@ -1459,8 +1455,8 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 				array = var.read(origin, shape);
 
 			} catch (Exception e) {
-				stderr.println(e.getMessage());
-				e.printStackTrace(stderr);
+        System.err.println(e.getMessage());
+				e.printStackTrace(System.err);
 				throw new IOException("Unable to read '" + param + "'");
 			}
 
@@ -1546,7 +1542,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 
 						if (Float.isNaN(f)) {
 							is_nan = true;
-						} else if (!ArgoFileValidator.is_FillValue(fValue, f)) {
+						} else if (!is_FillValue(fValue, f)) {
 							data = f;
 						}
 					}
@@ -1569,14 +1565,14 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 			try {
 				prm_qc = (char[]) varQC.read(origin2, shape2).copyTo1DJavaArray();
 			} catch (InvalidRangeException e) {
-				stderr.println("validateParams: Invalid range in read");
-				stderr.println(e.getMessage());
-				e.printStackTrace(stderr);
+        System.err.println("validateParams: Invalid range in read");
+        System.err.println(e.getMessage());
+				e.printStackTrace(System.err);
 				throw new IOException("Unable to read " + varName + "_QC[" + profNum + "]: InvalidRangeException");
 
 			} catch (IOException e) {
-				stderr.println(e.getMessage());
-				e.printStackTrace(stderr);
+        System.err.println(e.getMessage());
+				e.printStackTrace(System.err);
 				throw new IOException("Unable to read " + varName + "_QC[" + profNum + "]: InvalidRangeException");
 			}
 
@@ -1608,7 +1604,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 					inf++;
 				}
 
-				SkosConcept qcFlagsTableEntry = ArgoNVSReferenceTable.DM_QC_FLAG_TABLE.getConceptMembersByAltLabelMap()
+				SkosConcept qcFlagsTableEntry = argoNVSReferenceTable.getDM_QC_FLAG_TABLE().getConceptMembersByAltLabelMap()
 						.get(String.valueOf(prm_qc[k]));
 
 				// =======
@@ -1625,7 +1621,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 					// =======
 					// CK_0074
 					// =======
-					if (ArgoFileValidator.is_FillValue(fValue, prm[k])) {
+					if (is_FillValue(fValue, prm[k])) {
 						// ..data is missing - QC better be too
 						if (prm_qc[k] != '9' && prm_qc[k] != '0') {
 							notMiss++;
@@ -1665,7 +1661,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 					if (prm_qc[k] == ' ') {
 
 						// ..qc set to NOT MEASURED, data better be missing
-						if (!ArgoFileValidator.is_FillValue(fValue, prm[k])) {
+						if (!is_FillValue(fValue, prm[k])) {
 							notNotMeas++;
 						}
 					} else {
@@ -1785,8 +1781,8 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 					array = var.read(origin, shape);
 
 				} catch (Exception e) {
-					stderr.println(e.getMessage());
-					e.printStackTrace(stderr);
+          System.err.println(e.getMessage());
+					e.printStackTrace(System.err);
 					throw new IOException("Unable to read " + varName + "[" + profNum + "]  (validateParams)");
 				}
 
@@ -1875,7 +1871,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 
 							if (Float.isNaN(f)) {
 								is_nan = true;
-							} else if (!ArgoFileValidator.is_FillValue(fValue, f)) {
+							} else if (!is_FillValue(fValue, f)) {
 								data = f;
 							}
 						}
@@ -1899,8 +1895,8 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 					array = varErr.read(origin2, shape2);
 
 				} catch (Exception e) {
-					stderr.println(e.getMessage());
-					e.printStackTrace(stderr);
+          System.err.println(e.getMessage());
+					e.printStackTrace(System.err);
 					throw new IOException("Unable to read " + varName + "[" + profNum + "]  (validateParams)");
 				}
 
@@ -2001,7 +1997,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 						// CK_0077
 						// ========
 						// ..check the per level QC flag
-						SkosConcept qcFlagsTableEntry = ArgoNVSReferenceTable.DM_QC_FLAG_TABLE
+						SkosConcept qcFlagsTableEntry = argoNVSReferenceTable.getDM_QC_FLAG_TABLE()
 								.getConceptMembersByAltLabelMap().get(String.valueOf(prm_adj_qc[k]));
 
 						if (qcFlagsTableEntry != null) {
@@ -2029,7 +2025,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 								incNotMeas++;
 							} else {
 
-								if (!ArgoFileValidator.is_FillValue(fValue, prm_adj[k])) {
+								if (!is_FillValue(fValue, prm_adj[k])) {
 									notNotMeas++;
 								}
 							}
@@ -2039,14 +2035,14 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 							// CK_0081
 							// =======
 							// ..check if param (not param_adj!) is missing
-							if (ArgoFileValidator.is_FillValue(fValue, prm[k])) {
+							if (is_FillValue(fValue, prm[k])) {
 								// .....param is missing.....
 
-								if (!ArgoFileValidator.is_FillValue(fValue, prm_adj[k])) {
+								if (!is_FillValue(fValue, prm_adj[k])) {
 									// ..param_adjusted is NOT missing - error
 									missPrm++;
 								}
-								if (!ArgoFileValidator.is_FillValue(fValue, prm_adj_err[k])) {
+								if (!is_FillValue(fValue, prm_adj_err[k])) {
 									// ..param_adjusted_error is NOT missing - error
 									errNotMiss++;
 								}
@@ -2058,7 +2054,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 							} else {
 								// .....param is NOT missing......
 
-								if (ArgoFileValidator.is_FillValue(fValue, prm_adj[k])) {
+								if (is_FillValue(fValue, prm_adj[k])) {
 									// =======
 									// CK_0082
 									// =======
@@ -2081,7 +2077,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 									// =======
 									// CK_0087
 									// =======
-									if (!ArgoFileValidator.is_FillValue(fValue, prm_adj_err[k])) {
+									if (!is_FillValue(fValue, prm_adj_err[k])) {
 										errNotMiss++;
 									}
 
@@ -2249,7 +2245,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 			char profileQCFillValue = ' ';
 
 			SkosConcept tableEntry;
-			tableEntry = ArgoNVSReferenceTable.PROF_QC_FLAG_TABLE.getConceptMembersByAltLabelMap()
+			tableEntry = argoNVSReferenceTable.getPROF_QC_FLAG_TABLE().getConceptMembersByAltLabelMap()
 					.get(String.valueOf(profQC));
 			// =======
 			// CK_0058
@@ -2332,10 +2328,10 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 		// CK_0062
 		// =======
 		for (int k = 0; k < prm_adj.length; k++) {
-			if (!ArgoFileValidator.is_FillValue(fValue, prm_adj[k])) {
+			if (!is_FillValue(fValue, prm_adj[k])) {
 				missNot++;
 			}
-			if (!ArgoFileValidator.is_FillValue(fValue, prm_adj_err[k])) {
+			if (!is_FillValue(fValue, prm_adj_err[k])) {
 				errNotMiss++;
 			}
 			if (prm_adj_qc[k] != ' ') {
@@ -2379,7 +2375,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 	 * @param nLevel number of levels in the file
 	 * @throws IOException If an I/O error occurs
 	 */
-	public void validateQC(int nProf, int nParam, int nLevel) throws IOException {
+	private void validateQC(int nProf, int nParam, int nLevel) throws IOException {
 		if (log.isDebugEnabled()) {
 			log.debug(".....validateQC.....");
 		}
@@ -2393,7 +2389,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 			Character ch;
 			ch = juldQC.charAt(n);
 
-			tableEntry = ArgoNVSReferenceTable.DM_QC_FLAG_TABLE.getConceptMembersByAltLabelMap()
+			tableEntry = argoNVSReferenceTable.getDM_QC_FLAG_TABLE().getConceptMembersByAltLabelMap()
 					.get(String.valueOf(ch));
 
 			// =======
@@ -2417,7 +2413,7 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 			// CK_0055
 			// =======
 			ch = posQC.charAt(n);
-			tableEntry = ArgoNVSReferenceTable.DM_QC_FLAG_TABLE.getConceptMembersByAltLabelMap()
+			tableEntry = argoNVSReferenceTable.getDM_QC_FLAG_TABLE().getConceptMembersByAltLabelMap()
 					.get(String.valueOf(ch));
 			if (tableEntry != null) {
 				// =======
@@ -2434,5 +2430,15 @@ public class ArgoProfileFileValidator extends ArgoFileValidator {
 			}
 		}
 	}
+
+  @Override
+  public boolean validateData(boolean ckNulls) throws IOException {
+    return validateData(true, null, ckNulls);
+  }
+
+  @Override
+  public boolean validateData(String dacName, boolean ckNulls) throws IOException {
+    return validateData(true, dacName, ckNulls);
+  }
 
 } // ..end class

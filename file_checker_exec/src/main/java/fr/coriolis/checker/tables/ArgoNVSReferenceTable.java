@@ -3,7 +3,7 @@ package fr.coriolis.checker.tables;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.PrintStream;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -12,9 +12,7 @@ import fr.coriolis.checker.utils.NetUtils;
 
 public final class ArgoNVSReferenceTable {
 
-	private static PrintStream stderr = new PrintStream(System.err);
-
-	public static enum RELEVANT_TABLES {
+	public enum RELEVANT_TABLES {
 		DATA_TYPE("DATA_TYPE", "R01"), DM_QC_FLAG("DM_QC_FLAG", "RD2"), PLATFORM_TYPE("PLATFORM_TYPE", "R23"),
 		PLATFORM_MAKER("PLATFORM_MAKER", "R24"), PROF_QC_FLAG("PROF_QC_FLAG", "RP2"),
 		POSITION_ACCURACY("POSITION_ACCURACY", "R05"), DATA_STATE_INDICATOR("DATA_STATE_INDICATOR", "R06"),
@@ -52,34 +50,138 @@ public final class ArgoNVSReferenceTable {
 	// ==========
 	// ALL TABLES
 	// ==========
-	public static SkosCollection DATA_TYPE_TABLE;
-	public static SkosCollection DM_QC_FLAG_TABLE;
-	public static SkosCollection PLATFORM_TYPE_TABLE;
-	public static SkosCollection PLATFORM_MAKER_TABLE;
-	public static SkosCollection PROF_QC_FLAG_TABLE;
-	public static SkosCollection POSITION_ACCURACY_TABLE;
-	public static SkosCollection DATA_STATE_INDICATOR_TABLE;
-	public static SkosCollection ARGO_WMO_INST_TYPE_TABLE;
-	public static SkosCollection POSITIONING_SYSTEM_TABLE;
-	public static SkosCollection TRANS_SYSTEM_TABLE;
-	public static SkosCollection VERTICAL_SAMPLING_SCHEME_TABLE;
-	public static SkosCollection STATUS_TABLE;
-	public static SkosCollection GROUNDED_TABLE;
-	public static SkosCollection PLATFORM_FAMILY_TABLE;
-	public static SkosCollection SENSOR_TABLE;
-	public static SkosCollection SENSOR_MAKER_TABLE;
-	public static SkosCollection SENSOR_MODEL_TABLE;
-	public static SkosCollection MEASUREMENT_CODE_ID_TABLE;
-	public static SkosCollection TECHNICAL_PARAMETER_NAME_TABLE;
-	public static SkosCollection CONFIG_PARAMETER_NAME_TABLE;
-	public static SkosCollection PARAMETER_TABLE;
-	public static SkosCollection PROGRAM_NAME_TABLE;
-	public static SkosCollection BATTERY_MAKER_TABLE;
-	public static SkosCollection BATTERY_TYPE_TABLE;
-	public static SkosCollection BATTERY_SIZE_TABLE;
-	public static SkosCollection PI_NAME_TABLE;
+	private SkosCollection DATA_TYPE_TABLE;
+	private SkosCollection DM_QC_FLAG_TABLE;
+	private SkosCollection PLATFORM_TYPE_TABLE;
+	private SkosCollection PLATFORM_MAKER_TABLE;
+	private SkosCollection PROF_QC_FLAG_TABLE;
+	private SkosCollection POSITION_ACCURACY_TABLE;
+	private SkosCollection DATA_STATE_INDICATOR_TABLE;
+	private SkosCollection ARGO_WMO_INST_TYPE_TABLE;
+	private SkosCollection POSITIONING_SYSTEM_TABLE;
+	private SkosCollection TRANS_SYSTEM_TABLE;
+	private SkosCollection VERTICAL_SAMPLING_SCHEME_TABLE;
+	private SkosCollection STATUS_TABLE;
+	private SkosCollection GROUNDED_TABLE;
+	private SkosCollection PLATFORM_FAMILY_TABLE;
+	private SkosCollection SENSOR_TABLE;
+	private SkosCollection SENSOR_MAKER_TABLE;
+	private SkosCollection SENSOR_MODEL_TABLE;
+	private SkosCollection MEASUREMENT_CODE_ID_TABLE;
+	private SkosCollection TECHNICAL_PARAMETER_NAME_TABLE;
+	private SkosCollection CONFIG_PARAMETER_NAME_TABLE;
+	private SkosCollection PARAMETER_TABLE;
+	private SkosCollection PROGRAM_NAME_TABLE;
+	private SkosCollection BATTERY_MAKER_TABLE;
+	private SkosCollection BATTERY_TYPE_TABLE;
+	private SkosCollection BATTERY_SIZE_TABLE;
+	private SkosCollection PI_NAME_TABLE;
 
-	// ====
+  public SkosCollection getDATA_TYPE_TABLE() {
+    return DATA_TYPE_TABLE;
+  }
+
+  public SkosCollection getDM_QC_FLAG_TABLE() {
+    return DM_QC_FLAG_TABLE;
+  }
+
+  public SkosCollection getPLATFORM_TYPE_TABLE() {
+    return PLATFORM_TYPE_TABLE;
+  }
+
+  public SkosCollection getPLATFORM_MAKER_TABLE() {
+    return PLATFORM_MAKER_TABLE;
+  }
+
+  public SkosCollection getPROF_QC_FLAG_TABLE() {
+    return PROF_QC_FLAG_TABLE;
+  }
+
+  public SkosCollection getPOSITION_ACCURACY_TABLE() {
+    return POSITION_ACCURACY_TABLE;
+  }
+
+  public SkosCollection getDATA_STATE_INDICATOR_TABLE() {
+    return DATA_STATE_INDICATOR_TABLE;
+  }
+
+  public SkosCollection getARGO_WMO_INST_TYPE_TABLE() {
+    return ARGO_WMO_INST_TYPE_TABLE;
+  }
+
+  public SkosCollection getPOSITIONING_SYSTEM_TABLE() {
+    return POSITIONING_SYSTEM_TABLE;
+  }
+
+  public SkosCollection getTRANS_SYSTEM_TABLE() {
+    return TRANS_SYSTEM_TABLE;
+  }
+
+  public SkosCollection getVERTICAL_SAMPLING_SCHEME_TABLE() {
+    return VERTICAL_SAMPLING_SCHEME_TABLE;
+  }
+
+  public SkosCollection getSTATUS_TABLE() {
+    return STATUS_TABLE;
+  }
+
+  public SkosCollection getGROUNDED_TABLE() {
+    return GROUNDED_TABLE;
+  }
+
+  public SkosCollection getPLATFORM_FAMILY_TABLE() {
+    return PLATFORM_FAMILY_TABLE;
+  }
+
+  public SkosCollection getSENSOR_TABLE() {
+    return SENSOR_TABLE;
+  }
+
+  public SkosCollection getSENSOR_MAKER_TABLE() {
+    return SENSOR_MAKER_TABLE;
+  }
+
+  public SkosCollection getSENSOR_MODEL_TABLE() {
+    return SENSOR_MODEL_TABLE;
+  }
+
+  public SkosCollection getMEASUREMENT_CODE_ID_TABLE() {
+    return MEASUREMENT_CODE_ID_TABLE;
+  }
+
+  public SkosCollection getTECHNICAL_PARAMETER_NAME_TABLE() {
+    return TECHNICAL_PARAMETER_NAME_TABLE;
+  }
+
+  public SkosCollection getCONFIG_PARAMETER_NAME_TABLE() {
+    return CONFIG_PARAMETER_NAME_TABLE;
+  }
+
+  public SkosCollection getPARAMETER_TABLE() {
+    return PARAMETER_TABLE;
+  }
+
+  public SkosCollection getPROGRAM_NAME_TABLE() {
+    return PROGRAM_NAME_TABLE;
+  }
+
+  public SkosCollection getBATTERY_MAKER_TABLE() {
+    return BATTERY_MAKER_TABLE;
+  }
+
+  public SkosCollection getBATTERY_TYPE_TABLE() {
+    return BATTERY_TYPE_TABLE;
+  }
+
+  public SkosCollection getBATTERY_SIZE_TABLE() {
+    return BATTERY_SIZE_TABLE;
+  }
+
+  public SkosCollection getPI_NAME_TABLE() {
+    return PI_NAME_TABLE;
+  }
+
+  // ====
 	// INIT
 	// ====
 	/**
@@ -88,27 +190,27 @@ public final class ArgoNVSReferenceTable {
 	 * NVS jsonld table. Then populate all static variable of the Argo netcdf files
 	 * checkers 's useful tables.
 	 * 
-	 * @param nvsFolderPath
+	 *
 	 */
-	public static void initialize() {
+	public static ArgoNVSReferenceTable initialize(boolean useInternalSpecs, Path specDir) {
 		// MAp to store the tables
 		Map<RELEVANT_TABLES, SkosCollection> nvsReferenceTables = new HashMap<>();
 
 		// loop over relevant table list
 		for (RELEVANT_TABLES t : RELEVANT_TABLES.values()) {
 			String fileRableName = "NVS/" + t.getCode() + ".jsonld";
-			try (InputStream tableInputStream = SpecIO.getInstance().open(fileRableName)) {
+			try (InputStream tableInputStream = SpecIO.open(useInternalSpecs, specDir, fileRableName)) {
 				processNVSTableFile(nvsReferenceTables, tableInputStream);
 			} catch (FileNotFoundException e) {
-				stderr.println("Table file not found : " + fileRableName + " (" + e.getMessage() + ")");
+        System.err.println("Table file not found : " + fileRableName + " (" + e.getMessage() + ")");
 				break;
 			} catch (IOException e) {
-				stderr.println("Failed to parse table file: " + fileRableName + " (" + e.getMessage() + ")");
+        System.err.println("Failed to parse table file: " + fileRableName + " (" + e.getMessage() + ")");
 				break;
 			}
 		}
 
-		populateStaticTables(nvsReferenceTables);
+		return new ArgoNVSReferenceTable(nvsReferenceTables);
 	}
 
 	/**
@@ -116,7 +218,7 @@ public final class ArgoNVSReferenceTable {
 	 * 
 	 */
 
-	public static void initializeFromInternet(String baseUrl) {
+	public static ArgoNVSReferenceTable initializeFromInternet(String baseUrl) {
 		Map<RELEVANT_TABLES, SkosCollection> nvsReferenceTables = new HashMap<>();
 
 		// Loop through relevant tables list :
@@ -125,12 +227,12 @@ public final class ArgoNVSReferenceTable {
 			try (InputStream tableInputStream = NetUtils.openInputStream(tableUrl)) {
 				processNVSTableFile(nvsReferenceTables, tableInputStream);
 			} catch (IOException e) {
-				stderr.println("Table file not found on NVS : " + tableUrl + " (" + e.getMessage() + ")");
+        System.err.println("Table file not found on NVS : " + tableUrl + " (" + e.getMessage() + ")");
 				break;
 			}
 		}
 
-		populateStaticTables(nvsReferenceTables);
+		return new ArgoNVSReferenceTable(nvsReferenceTables);
 
 	}
 
@@ -154,7 +256,7 @@ public final class ArgoNVSReferenceTable {
 		}
 	}
 
-	private static void populateStaticTables(Map<RELEVANT_TABLES, SkosCollection> nvsReferenceTables) {
+	private ArgoNVSReferenceTable(Map<RELEVANT_TABLES, SkosCollection> nvsReferenceTables) {
 		DATA_TYPE_TABLE = nvsReferenceTables.get(RELEVANT_TABLES.DATA_TYPE);
 		DM_QC_FLAG_TABLE = nvsReferenceTables.get(RELEVANT_TABLES.DM_QC_FLAG);
 		PLATFORM_TYPE_TABLE = nvsReferenceTables.get(RELEVANT_TABLES.PLATFORM_TYPE);

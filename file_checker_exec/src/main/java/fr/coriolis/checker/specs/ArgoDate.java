@@ -1,14 +1,15 @@
 package fr.coriolis.checker.specs;
 
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
 import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.util.Collections;
 import java.util.Date;
-import java.util.Calendar;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.TimeZone;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
-import java.lang.Math;
 
 
 /**
@@ -24,87 +25,33 @@ public class ArgoDate extends Date
 
    //............class variables.................
 
-   private static Calendar cal;
-   private static SimpleDateFormat dateFormat;
-   private static long refTime = Long.MAX_VALUE;
-   private static TimeZone tz;
+   private static final long refTime = Instant.parse("1950-01-01T00:00:00.000Z").toEpochMilli();
 
-   private static HashMap<String, SimpleDateFormat> validFormat = 
-      new HashMap<String, SimpleDateFormat>();
+   // SimpleDateFormat is not thread safe.  Use factory functions.
+   private static final Map<String, Supplier<SimpleDateFormat>> validFormat;
 
-   private static Pattern nonDigit;
-   
+   private static final Pattern nonDigit = Pattern.compile(".*\\D.*");
+
+   private static SimpleDateFormat createSimpleDateFormat(String pattern) {
+     SimpleDateFormat df = new SimpleDateFormat(pattern);
+     df.setTimeZone(TimeZone.getTimeZone("GMT"));
+     df.setLenient(false);
+     return df;
+   }
+
    static {
-      tz = TimeZone.getTimeZone("GMT");
-      cal = Calendar.getInstance(tz);
-      refTime = getRefTime();
-      
-      dateFormat = (SimpleDateFormat) DateFormat.getInstance();
-      dateFormat.setTimeZone(tz);
-      dateFormat.applyPattern("yyyyMMddHHmmss");
-      dateFormat.setLenient(false);
-
-
-      SimpleDateFormat DF = (SimpleDateFormat) DateFormat.getInstance();
-      DF.setTimeZone(tz);
-      DF.setLenient(false);
-
-      SimpleDateFormat df;
-
-      //..day month year
-      df = (SimpleDateFormat) DF.clone();
-      df.applyPattern("ddMMyyyy");
-      validFormat.put("DDMMYYYY", df);
-
-      //..year month day hour minute second
-      df = (SimpleDateFormat) DF.clone();
-      df.applyPattern("yyyyMMddHHmmss");
-      validFormat.put("YYYYMMDDHHMMSS", df);
-
-      //..year month day
-      df = (SimpleDateFormat) DF.clone();
-      df.applyPattern("yyyyMMdd");
-      validFormat.put("YYYYMMDD", df);
-
-      //..year
-      df = (SimpleDateFormat) DF.clone();
-      df.applyPattern("yyyy");
-      validFormat.put("YYYY", df);
-
-      //..month (number)
-      df = (SimpleDateFormat) DF.clone();
-      df.applyPattern("MM");
-      validFormat.put("MM", df);
-
-      //..day of month
-      df = (SimpleDateFormat) DF.clone();
-      df.applyPattern("dd");
-      validFormat.put("DD", df);
-
-      //..clock: hour minute second
-      df = (SimpleDateFormat) DF.clone();
-      df.applyPattern("HHmmss");
-      validFormat.put("HHMMSS", df);
-
-      //..clock: hour minute
-      df = (SimpleDateFormat) DF.clone();
-      df.applyPattern("HHmm");
-      validFormat.put("HHMM", df);
-
-      //..clock: minute second
-      df = (SimpleDateFormat) DF.clone();
-      df.applyPattern("mmss");
-      df.setLenient(false);
-      validFormat.put("MMSS", df);
-
-      //..clock: hour
-      df = (SimpleDateFormat) DF.clone();
-      df.applyPattern("HH");
-      validFormat.put("HH", df);
-
-      //..
-
-      nonDigit = Pattern.compile(".*\\D.*");
+     Map<String, Supplier<SimpleDateFormat>> validFormatTemp = new HashMap<>();
+     validFormatTemp.put("DDMMYYYY", () -> createSimpleDateFormat("ddMMyyyy"));
+     validFormatTemp.put("YYYYMMDDHHMMSS", () -> createSimpleDateFormat("yyyyMMddHHmmss"));
+     validFormatTemp.put("YYYYMMDD", () -> createSimpleDateFormat("yyyyMMdd"));
+     validFormatTemp.put("YYYY", () -> createSimpleDateFormat("yyyy"));
+     validFormatTemp.put("MM", () -> createSimpleDateFormat("MM"));
+     validFormatTemp.put("DD", () -> createSimpleDateFormat("dd"));
+     validFormatTemp.put("HHMMSS", () -> createSimpleDateFormat("HHmmss"));
+     validFormatTemp.put("HHMM", () -> createSimpleDateFormat("HHmm"));
+     validFormatTemp.put("MMSS", () -> createSimpleDateFormat("mmss"));
+     validFormatTemp.put("HH", () -> createSimpleDateFormat("HH"));
+     validFormat = Collections.unmodifiableMap(validFormatTemp);
    }
 
    //static PrintStream stdout = new PrintStream(System.out);
@@ -114,7 +61,9 @@ public class ArgoDate extends Date
    //******************************************************
 
 
-   public static String format(Date date) { return dateFormat.format(date); }
+   public static String format(Date date) {
+     return validFormat.get("YYYYMMDDHHMMSS").get().format(date);
+   }
    
    public static Date get(long long_juld)
    {
@@ -139,23 +88,23 @@ public class ArgoDate extends Date
     */
    public static Boolean checkArgoDatePattern (String pattern, String value)
    {
-      SimpleDateFormat format = validFormat.get(pattern);
+      SimpleDateFormat format = validFormat.get(pattern).get();
 
       if (format == null) {
          return null;
       }
 
       if (value.length() != pattern.length() || nonDigit.matcher(value).matches()) {
-         return new Boolean(false);
+         return false;
       }
 
 
       try {
          Date date = format.parse(value);
       } catch (ParseException e) {
-         return new Boolean(false);
+         return false;
       }
-      return new Boolean(true);
+      return true;
    }
 
    /**
@@ -170,6 +119,7 @@ public class ArgoDate extends Date
 
       try {
          //..
+        SimpleDateFormat dateFormat = validFormat.get("YYYYMMDDHHMMSS").get();
          date = dateFormat.parse(dtg);
 
          String tst = dateFormat.format(date);
@@ -182,19 +132,6 @@ public class ArgoDate extends Date
       }   
 
       return (date);
-   }
-
-   private static long getRefTime() {
-      cal.set(1950, 00, 01, 00, 00, 00);
-
-      //..this is odd.  The above cal.set does NOT intialize the millisecond
-      //..value of cal.  The milliseconds are set to something that is 
-      //..runtime depedent.  Thus the "cal" is not repeatable at sub-second
-      //..resolution.  So...
-      //..initialize milliseconds to 0
-      cal.set(Calendar.MILLISECOND, 0);
-
-      return (cal.getTimeInMillis());
    }
 
 }

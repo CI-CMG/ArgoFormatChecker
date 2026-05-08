@@ -2,3 +2,4 @@
 /target/
 ValidateSubmit_LOG
 *.log
+.idea/

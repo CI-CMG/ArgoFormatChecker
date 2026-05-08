@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -20,12 +21,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
 import fr.coriolis.checker.tables.ArgoNVSReferenceTable;
 import fr.coriolis.checker.tables.SkosConcept;
 import fr.coriolis.checker.utils.NvsDefinitionParser;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Implements features to check the Meta-data CONFIG_PARAMETER_NAME (including
@@ -46,7 +46,7 @@ public class ArgoConfigTechParam {
 
 	// ..........Class variables..............
 
-	public static enum ConfigTechValueType {
+	private enum ConfigTechValueType {
 		DATE_TIME("date/time"), FLOAT("float"), HEX("hex"), INTEGER("integer"), LOGICAL("logical"), STRING("string"),
 		UNKNOWN("unknown");
 
@@ -73,10 +73,10 @@ public class ArgoConfigTechParam {
 
 	// ......define and initialize the template replacement patterns......
 
-	static final String defaultTemplateReplacement;
-	static final Map<String, String> templateReplacement;
-	static final Set<String> knownTemplates;
-	static final Set<String> knownTemplatesWithMatchListToCheck;
+	private static final String defaultTemplateReplacement;
+  private static final Map<String, String> templateReplacement;
+  private static final Set<String> knownTemplates;
+  private static final Set<String> knownTemplatesWithMatchListToCheck;
 	static {
 		defaultTemplateReplacement = "(?<default>\\w+)";
 
@@ -99,24 +99,17 @@ public class ArgoConfigTechParam {
 		temp.put("Z", "(?<Z>\\d+?)");
 		templateReplacement = Collections.unmodifiableMap(temp);
 
-		knownTemplates = new HashSet<>(Arrays.asList("D", "horizontalphasename", "I", "N", "N1", "param", "PARAM", "S",
-				"SubS", "shortsensorname", "verticalphasename", "cyclephasename", "digit", "int", "Z"));
-		knownTemplatesWithMatchListToCheck = new HashSet<>(Arrays.asList("horizontalphasename", "N", "N1", "digit",
-				"param", "PARAM", "shortsensorname", "verticalphasename", "cyclephasename"));
+		knownTemplates = Collections.unmodifiableSet(new HashSet<>(Arrays.asList("D", "horizontalphasename", "I", "N", "N1", "param", "PARAM", "S",
+				"SubS", "shortsensorname", "verticalphasename", "cyclephasename", "digit", "int", "Z")));
+		knownTemplatesWithMatchListToCheck = Collections.unmodifiableSet(new HashSet<>(Arrays.asList("horizontalphasename", "N", "N1", "digit",
+				"param", "PARAM", "shortsensorname", "verticalphasename", "cyclephasename")));
 
 	}
 	// ......define and initialize the pattern matcher objects......
-	static Pattern pBlankOrComment; // ..match a blank line or a comment line
-	static Pattern pComment; // ..comment
-
-	static {
-		// ..match a blank line (or a line with just comments)
-		pBlankOrComment = Pattern.compile("^\\s*(?://.*)*");
-
-		// ..match a comment (any where on the line) - recognize the "//@" comments
-		// ..group 1: the word following "@"; group 2: the setting
-		pComment = Pattern.compile("//(?:@\\s*(\\w+)\\s*=\\s*\"(.+)\")?.*$");
-	}
+	private static final Pattern pBlankOrComment = Pattern.compile("^\\s*(?://.*)*"); // ..match a blank line or a comment line
+  // ..match a comment (any where on the line) - recognize the "//@" comments
+  // ..group 1: the word following "@"; group 2: the setting
+  private static final Pattern pComment = Pattern.compile("//(?:@\\s*(\\w+)\\s*=\\s*\"(.+)\")?.*$");// ..comment
 
 	// .....object variables......
 
@@ -155,7 +148,9 @@ public class ArgoConfigTechParam {
 	private LinkedHashMap<String, ConfigTechValueType> unitList_DEP; // ..config/tech units - deprecated
 
 	// ..logger
-	private static final Logger log = LogManager.getLogger("ArgoConfigTechParam");
+	private static final Logger log = LoggerFactory.getLogger("ArgoConfigTechParam");
+
+  private final ArgoNVSReferenceTable argoNVSReferenceTable;
 
 //............................................
 //              CONSTRUCTORS
@@ -168,14 +163,23 @@ public class ArgoConfigTechParam {
 	 * <i>argo-config_names-spec-v&lt;version&gt;</i> and
 	 * <i>"argo-tech_names-spec-v&lt;version&gt;</i>
 	 *
-	 * @param specDir    Path to the specification file directory
+	 *
 	 * @param version    Argo netCDF file version
 	 * @param initConfig true: Read CONFIGURATION_PARAMETER specification file
 	 * @param initTech   true: Read TECHNICAL_PARAMETER specification file
 	 * @throws IOException File I/O errors
 	 */
 
-	public ArgoConfigTechParam(String version, boolean initConfig, boolean initTech) throws IOException {
+	public ArgoConfigTechParam(
+      String version,
+      boolean initConfig,
+      boolean initTech,
+      ArgoNVSReferenceTable argoNVSReferenceTable,
+      boolean useInternalSpecs,
+      Path specDir
+  ) throws IOException {
+    this.argoNVSReferenceTable = argoNVSReferenceTable;
+
 		log.debug("...ArgoConfigTechParam: start...");
 
 		this.version = version.trim();
@@ -190,7 +194,7 @@ public class ArgoConfigTechParam {
 			parseTechParamFile();
 		}
 
-		parseUnitFile();
+		parseUnitFile(useInternalSpecs, specDir);
 
 		if (log.isDebugEnabled()) {
 			if (configParamList == null) {
@@ -359,7 +363,7 @@ public class ArgoConfigTechParam {
 			match = checkRegex(name, activeRegex);
 
 			if (match != null) {
-				match.isDeprecated = false;
+				match.setDeprecated(false);
 				log.debug("findParam: '{}': active regex match '{}'", name, match.match);
 				return match;
 			}
@@ -380,7 +384,7 @@ public class ArgoConfigTechParam {
 			match = checkRegex(name, deprecatedRegex);
 
 			if (match != null) {
-				match.isDeprecated = true;
+				match.setDeprecated(true);
 				log.debug("findParam: '{}': deprecated regex match '{}'", name, match.match);
 				return match;
 			}
@@ -496,7 +500,7 @@ public class ArgoConfigTechParam {
 	/**
 	 * Determines the data-type of a parameter unit
 	 * 
-	 * @param unit the unit name
+	 *
 	 * @return data-type name
 	 */
 	public String getConfigTechDataType(String name) {
@@ -561,7 +565,7 @@ public class ArgoConfigTechParam {
 		configParamRegex_DEP = new LinkedHashMap<Pattern, HashMap<String, HashSet<String>>>(250);
 
 		// ....loop over the active and deprecated entries.....
-		for (SkosConcept configParamEntry : ArgoNVSReferenceTable.CONFIG_PARAMETER_NAME_TABLE
+		for (SkosConcept configParamEntry : argoNVSReferenceTable.getCONFIG_PARAMETER_NAME_TABLE()
 				.getConceptMembersByAltLabelMap().values()) {
 			if (!configParamEntry.isDeprecated()) {
 				parseParamName(configParamList, configParamRegex, "NVS R18 table", pTemplate, configParamEntry);
@@ -585,10 +589,8 @@ public class ArgoConfigTechParam {
 	 * 
 	 * @param paramList
 	 * @param paramRegex
-	 * @param nFile
-	 * @param fileName
 	 * @param pTemplate
-	 * @param column
+	 *
 	 */
 	private void parseParamName(LinkedHashSet<String> paramList,
 			LinkedHashMap<Pattern, HashMap<String, HashSet<String>>> paramRegex, String tableName, Pattern pTemplate,
@@ -682,7 +684,7 @@ public class ArgoConfigTechParam {
 		Pattern pTemplate = Pattern.compile("<([^>]+?)>");
 
 		// loop over tech paramaters PrefLabel list:
-		for (SkosConcept techParamEntry : ArgoNVSReferenceTable.TECHNICAL_PARAMETER_NAME_TABLE
+		for (SkosConcept techParamEntry : argoNVSReferenceTable.getTECHNICAL_PARAMETER_NAME_TABLE()
 				.getConceptMembersByAltLabelMap().values()) {
 			if (!techParamEntry.isDeprecated()) {
 				parseParamName(techParamList, techParamRegex, "NVS R14 table", pTemplate, techParamEntry);
@@ -830,7 +832,7 @@ public class ArgoConfigTechParam {
 	 * "NUMBER_CroverAscentSamplesDepthZone1" => result = ["short_sensor_name"
 	 * :"Crover", "Z" : "1"]
 	 *
-	 * @param template
+	 *
 	 * @param concreteValue
 	 * @param pRegex
 	 * @return
@@ -948,7 +950,6 @@ public class ArgoConfigTechParam {
 	 * "PRES_SurfaceOffsetTruncatedPlus5dbar"
 	 *
 	 * @param fileName
-	 * @param file
 	 * @param parameterCode
 	 * @return parameterName
 	 * @throws IOException
@@ -986,7 +987,7 @@ public class ArgoConfigTechParam {
 	 * @return True - file parsed; False - failed to parse file
 	 * @throws IOException indicates file read or permission error
 	 */
-	public void parseUnitFile() throws IOException {
+	private void parseUnitFile(boolean useInternal, Path specDir) throws IOException {
 		log.debug(".....parseConfigTechUnitFile: start.....");
 		// ===========
 		// CK_0095 1/2
@@ -1002,9 +1003,10 @@ public class ArgoConfigTechParam {
 			// .......parse the param unit file.......
 			// ..open the file
 
-			try (InputStream in = SpecIO.getInstance().open(fileName);
-					BufferedReader fileReader = new BufferedReader(
-							new InputStreamReader(in, StandardCharsets.UTF_8));) {
+			try (
+          InputStream in = SpecIO.open(useInternal, specDir, fileName);
+					BufferedReader fileReader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))
+      ) {
 
 				// ..create list variables
 				// ..open file
@@ -1074,21 +1076,21 @@ public class ArgoConfigTechParam {
 //                    INNER CLASSES
 //...................................................................
 
-	public class ArgoConfigTechParamMatch {
+	public static class ArgoConfigTechParamMatch {
 		// ......object variables........
 
-		public boolean isDeprecated;
-		public String match;
-		public int nUnMatchedTemplates;
-		public HashMap<String, String> unMatchedTemplates;
-		public int nFailedMatchedTemplates;
-		public HashMap<String, String> failedMatchedTemplates;
+		private boolean deprecated;
+    private String match;
+    private int nUnMatchedTemplates;
+    private HashMap<String, String> unMatchedTemplates;
+    private int nFailedMatchedTemplates;
+    private HashMap<String, String> failedMatchedTemplates;
 
 		// ........constructors..........
 
 		public ArgoConfigTechParamMatch(String match, boolean isDeprecated) {
-			this.match = new String(match);
-			this.isDeprecated = isDeprecated;
+			this.match = match;
+			this.deprecated = isDeprecated;
 			this.nUnMatchedTemplates = 0;
 			this.unMatchedTemplates = null;
 			this.nFailedMatchedTemplates = 0;
@@ -1098,13 +1100,61 @@ public class ArgoConfigTechParam {
 		public ArgoConfigTechParamMatch(String match, boolean isDeprecated, int nUnMatchedTemplates,
 				HashMap<String, String> unMatchedTemplates, int nFailedMatchedTemplates,
 				HashMap<String, String> failedMatchedTemplates) {
-			this.match = new String(match);
-			this.isDeprecated = isDeprecated;
+			this.match = match;
+			this.deprecated = isDeprecated;
 			this.nUnMatchedTemplates = nUnMatchedTemplates;
 			this.unMatchedTemplates = unMatchedTemplates;
 			this.nFailedMatchedTemplates = nFailedMatchedTemplates;
 			this.failedMatchedTemplates = failedMatchedTemplates;
 		}
-	}
+
+    public boolean isDeprecated() {
+      return deprecated;
+    }
+
+    public void setDeprecated(boolean deprecated) {
+      this.deprecated = deprecated;
+    }
+
+    public String getMatch() {
+      return match;
+    }
+
+    public void setMatch(String match) {
+      this.match = match;
+    }
+
+    public int getnUnMatchedTemplates() {
+      return nUnMatchedTemplates;
+    }
+
+    public void setnUnMatchedTemplates(int nUnMatchedTemplates) {
+      this.nUnMatchedTemplates = nUnMatchedTemplates;
+    }
+
+    public HashMap<String, String> getUnMatchedTemplates() {
+      return unMatchedTemplates;
+    }
+
+    public void setUnMatchedTemplates(HashMap<String, String> unMatchedTemplates) {
+      this.unMatchedTemplates = unMatchedTemplates;
+    }
+
+    public int getnFailedMatchedTemplates() {
+      return nFailedMatchedTemplates;
+    }
+
+    public void setnFailedMatchedTemplates(int nFailedMatchedTemplates) {
+      this.nFailedMatchedTemplates = nFailedMatchedTemplates;
+    }
+
+    public HashMap<String, String> getFailedMatchedTemplates() {
+      return failedMatchedTemplates;
+    }
+
+    public void setFailedMatchedTemplates(HashMap<String, String> failedMatchedTemplates) {
+      this.failedMatchedTemplates = failedMatchedTemplates;
+    }
+  }
 
 } // ..end class
