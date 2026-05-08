@@ -1,0 +1,36 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>fr.ifremer</groupId>
+  <artifactId>file_checker_parent</artifactId>
+  <version>3.0.3</version>
+  <packaging>pom</packaging>
+
+  <name>Argo NetCDF file format checker parent</name>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.release>8</maven.compiler.release>
+  </properties>
+
+  <modules>
+    <module>file_checker_spec</module>
+    <module>file_checker_exec</module>
+  </modules>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+<!--        Set version new enough to use "release" property to build Java 8 compatible bytecode-->
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>3.13.0</version>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+  </build>
+
+</project>

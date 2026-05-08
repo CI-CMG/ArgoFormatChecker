@@ -1,3 +1,4 @@
 *.filecheck
 .env
+.idea/
 
