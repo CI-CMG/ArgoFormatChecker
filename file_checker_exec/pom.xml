@@ -23,6 +23,18 @@
       <com.fasterxml.jackson.version>2.18.3</com.fasterxml.jackson.version>
 	</properties>
 
+  <dependencyManagement>
+    <dependencies>
+      <!--security updates-->
+      <dependency>
+        <groupId>org.apache.httpcomponents</groupId>
+        <artifactId>httpclient-cache</artifactId>
+        <version>4.5.14</version>
+      </dependency>
+      <!--end security updates-->
+    </dependencies>
+  </dependencyManagement>
+
 	<dependencies>
 <!--    This jar contains the spec files under the "file_checker_spec" classpath directory.  No need to explicitly copy them during build.-->
     <dependency>
