@@ -6,7 +6,7 @@
   <parent>
     <groupId>fr.ifremer</groupId>
     <artifactId>file_checker_parent</artifactId>
-    <version>3.0.3</version>
+    <version>3.0.6</version>
   </parent>
 
 	<artifactId>file_checker_exec</artifactId>
