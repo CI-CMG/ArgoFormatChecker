@@ -5,7 +5,7 @@
 
 <!--  <groupId>fr.ifremer</groupId>-->
 <!--  <artifactId>file_checker_parent</artifactId>-->
-<!--  <version>3.0.3</version>-->
+<!--  <version>3.0.6</version>-->
 
   <groupId>io.github.ci-cmg</groupId>
   <artifactId>argo-file-checker-parent</artifactId>

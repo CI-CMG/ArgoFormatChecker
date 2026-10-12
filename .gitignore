@@ -1,4 +1,6 @@
 *.filecheck
 .env
 .idea/
+.DS_Store
 
+Release_procedure.md
