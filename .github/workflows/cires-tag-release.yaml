@@ -1,4 +1,4 @@
-name: maven tag release
+name: CIRES maven tag release
 
 on:
   workflow_dispatch:

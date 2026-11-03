@@ -1,4 +1,4 @@
-name: maven branch release
+name: CIRES maven branch release
 
 on:
   workflow_dispatch:
