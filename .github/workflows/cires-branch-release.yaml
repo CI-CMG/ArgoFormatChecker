@@ -1,8 +1,6 @@
 name: CIRES maven branch release
 
 on:
-  push:
-    branches: [ "file-checker-library-maven-central" ]
   workflow_dispatch:
 
 jobs:
