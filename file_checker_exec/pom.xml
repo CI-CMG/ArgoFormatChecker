@@ -13,7 +13,7 @@
 <!--	<artifactId>file_checker_exec</artifactId>-->
   <artifactId>argo-file-checker-exec</artifactId>
 
-<!--	<name>Argo NetCDF file format checker</name>-->
+	<name>Argo NetCDF file format checker</name>
 
 	<properties>
 		<dep.junit.version>5.11.4</dep.junit.version>
