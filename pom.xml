@@ -7,7 +7,7 @@
 
   <groupId>io.github.ci-cmg</groupId>
   <artifactId>argo-file-checker-parent</artifactId>
-  <version>103.0.7-SNAPSHOT</version>
+  <version>103.0.6-SNAPSHOT</version>
   <packaging>pom</packaging>
 
 
