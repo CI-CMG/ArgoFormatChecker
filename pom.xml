@@ -7,7 +7,7 @@
 
   <groupId>io.github.ci-cmg</groupId>
   <artifactId>argo-file-checker-parent</artifactId>
-  <version>103.0.6-SNAPSHOT</version>
+  <version>103.0.6</version>
   <packaging>pom</packaging>
 
 
@@ -40,7 +40,7 @@
     <connection>scm:git:https://github.com/CI-CMG/ArgoFormatChecker.git</connection>
     <developerConnection>scm:git:https://github.com/CI-CMG/ArgoFormatChecker.git</developerConnection>
     <url>https://github.com/CI-CMG/ArgoFormatChecker</url>
-    <tag>103.0</tag>
+    <tag>v103.0.6</tag>
   </scm>
 
   <properties>
